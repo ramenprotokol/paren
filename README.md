@@ -2,9 +2,9 @@
 
 **Watch a Lisp expression evaluate, one substitution at a time.**
 
-paren is a stepper for a small teaching subset of Clojure. Paste an expression (or pick one of five examples) and step through its evaluation. Each sub-expression is a paper card, nested inside the one that contains it. The card about to reduce (the *redex*) is outlined in vermilion. When you step, it folds shut into its value. The environment sits beside it as a stack of index cards, and every step has a one-line caption such as ``look up `n` → 3``.
+paren is a stepper for a small teaching subset of Clojure. Paste an expression (or pick one of five examples) and step through its evaluation. Each sub-expression is a paper card, stacked on the one that contains it; deeper cards are darker and sit higher, with longer shadows. The part about to reduce (the *redex*) is washed in vermilion, with a folded corner, or becomes a vermilion chip when it is a single name. When you step, it folds shut into its value. The environment sits beside the stage as a stack of index cards, and every step has a one-line caption such as ``look up `n` → 3``.
 
-![paren stepping through a recursive fib, three calls deep](docs/screenshot.png)
+![paren stepping through a recursive fib, four calls deep, with the environment beside the stage](docs/screenshot.png)
 
 ## The 30-second experience
 
@@ -29,7 +29,7 @@ Everything that matters is ClojureScript under `src/paren/`.
   - `map`, `filter` and `reduce` unfold into the calls they will make, so a user function passed to `map` shows every call as its own steps.
   - Each step returns a caption, the redex's path, the environment at that point, and (for lookups) which frame answered.
 - **Tracing.** `trace` runs the whole program once and keeps every state. Clojure's persistent data structures share structure between states, so keeping thousands of snapshots is cheap, and stepping back or scrubbing is just indexing.
-- **Drawing.** `layout.cljs` turns a tree into cards and decides line breaks like a Clojure pretty-printer. A card stays on one line if it fits the stage width (measured in `ch`); otherwise it breaks the way Clojure is usually indented. `cond` pairs always get a line each. `app.cljs` renders that with plain DOM calls (no framework, to keep the bundle small) and runs the fold animation with the Web Animations API.
+- **Drawing.** `layout.cljs` turns a tree into cards and decides line breaks like a Clojure pretty-printer. A card stays on one line if it fits the stage width (measured in `ch`); otherwise it breaks the way Clojure is usually indented. `cond` pairs always get a line each. `app.cljs` renders that with plain DOM calls (no framework, to keep the bundle small) and runs the fold animation with the Web Animations API. From 1,180 px wide, the page has three columns (source, stage, environment), so the stage, its caption and the environment are in view together.
 
 ### The subset
 
@@ -75,11 +75,11 @@ npm run serve        # optional: serve dist/ on a random free port
 
 | file | raw | gzip |
 |---|---|---|
-| `js/main.<hash>.js` (everything: reader, evaluator, UI, cljs.core) | 285.7 KiB | 69.0 KiB |
-| `css/styles.<hash>.css` | 17.1 KiB | 4.8 KiB |
-| `index.html` | 5.7 KiB | 2.1 KiB |
+| `js/main.<hash>.js` (everything: reader, evaluator, UI, cljs.core) | 289.4 KiB | 70.1 KiB |
+| `css/styles.<hash>.css` | 19.2 KiB | 5.5 KiB |
+| `index.html` | 5.9 KiB | 2.2 KiB |
 
-About 65% of the bundle (by optimised size) is `cljs.core` itself; the whole first load of our own files is 75.8 KiB gzipped. Google Fonts (IBM Plex Mono and Instrument Serif) load separately.
+About 65% of the bundle (by optimised size) is `cljs.core` itself; the whole first load of our own files is 77.7 KiB gzipped. Google Fonts (IBM Plex Mono and Instrument Serif) load separately.
 
 ## Test
 
@@ -101,7 +101,7 @@ This runs three things:
 2. **The build.**
 3. **Node tests** (`tests/`):
    - a `dist/` smoke test: hashed files, the third-party notices, `_headers`, a 100 KiB gzip budget, and serving with the production headers;
-   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib`, WCAG AA contrast in light and dark, and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
+   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib`, WCAG AA contrast in light and dark (including text on the vermilion redex, as a chip and as a washed card), and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
 
 If Chrome isn't found, the browser tests are skipped. `REQUIRE_BROWSER=1` makes that a failure, and `CHROME_PATH` points at a specific browser.
 
@@ -142,7 +142,7 @@ There is deliberately no `npm run deploy` script and no `account_id` in `wrangle
 - **Printing differs from a REPL.** A function prints as `‹fn fib›` or `‹fn [x]›`, where a REPL would print an opaque object.
 - **The whole trace is computed when you press Step through**, on the main thread, up to the 5,000-step cap. Long traces take a moment. No timing is claimed.
 - **Layout is estimated in `ch`.** Very deep nesting can make the stage scroll sideways inside its own frame; the page itself does not scroll sideways.
-- **Contrast is checked by the automated test** at a particular step in each theme, not for every possible program.
+- **Contrast is checked by the automated test** at two steps of `fib` in each theme (one where the redex is a name, one where it is a whole card), not for every possible program.
 
 ## Next
 

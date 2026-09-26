@@ -189,8 +189,17 @@ test('phone width (400 px, emulated): no horizontal page scroll at any fib step'
 });
 
 // WCAG AA: body and caption text at least 4.5:1 against what is behind it.
-const CONTRAST = `(() => {
-  const parse = (c) => (c.match(/[\\d.]+/g) || []).map(Number);
+// (color-mix() computes to color(srgb r g b) with channels from 0 to 1.)
+const TEXT = ['#caption-text', '.counter', '.label', '.env-hint', '.count', '.colophon p',
+              '.icard dd', '.icard-kind', '.icard-note', '.tab-note', '.subset summary',
+              '#tree .card.d0 .atom', '#tree .card.d3 .atom', '#tree .card.d4 .atom', '#tree .br',
+              '.top > .form > .val', '.preset', '.run'];
+const REDEX_CARD = ['#tree .card.redex .atom', '#tree .card.redex > .ln > .br'];
+const CONTRAST = (sels) => `(() => {
+  const parse = (c) => {
+    const n = (c.match(/[\\d.]+/g) || []).map(Number);
+    return c.startsWith('color(srgb') ? n.map((v, i) => (i < 3 ? v * 255 : v)) : n;
+  };
   const lum = ([r, g, b]) => {
     const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
     return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
@@ -206,10 +215,7 @@ const CONTRAST = `(() => {
     const a = lum(parse(getComputedStyle(el).color).slice(0, 3)), b = lum(bgOf(el));
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   };
-  const sels = ['#caption-text', '.counter', '.label', '.env-hint', '.count', '.colophon p',
-                '.icard dd', '.icard-kind', '.icard-note', '.tab-note', '.subset summary',
-                '#tree .card.d0 .atom', '#tree .card.d3 .atom', '#tree .card.d4 .atom', '#tree .br',
-                '.top > .form > .val', '.preset', '.run'];
+  const sels = ${JSON.stringify(sels)};
   const out = {};
   for (const s of sels) {
     const els = [...document.querySelectorAll(s)];
@@ -224,10 +230,14 @@ for (const scheme of ['light', 'dark']) {
       const page = await chrome.openPage({ width: 1280, height: 800, scheme });
       await page.navigate(url);
       await page.waitFor(ready);
-      for (let i = 0; i < 20; i++) await page.key('ArrowRight'); // three calls deep
-      const ratios = await page.evaluate(CONTRAST);
+      for (let i = 0; i < 20; i++) await page.key('ArrowRight'); // three calls deep; the redex is a name
+      const ratios = await page.evaluate(CONTRAST(TEXT));
+      await page.key('ArrowRight'); // the redex is a whole card, (< 1 2)
+      const card = await page.evaluate(CONTRAST(REDEX_CARD));
+      Object.assign(ratios, card);
       console.log(`  ${scheme}:`, Object.entries(ratios).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(', '));
       assert.ok(Object.keys(ratios).length >= 14, 'most elements were found');
+      assert.equal(Object.keys(card).length, 2, 'the washed redex card was measured');
       for (const [sel, r] of Object.entries(ratios)) assert.ok(r >= 4.5, `${sel}: ${r.toFixed(2)}:1`);
       assert.deepEqual(appProblems(page.problems), []);
       await page.close();

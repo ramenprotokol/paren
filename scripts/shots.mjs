@@ -2,6 +2,8 @@
 // Screenshots of dist/ for visual review: desktop light and dark, and a true
 // 400 px phone width via device emulation. Writes to SHOTS_DIR (default
 // shots/, which is gitignored). Usage: node scripts/shots.mjs [preset] [step]
+// With SRC set, the page opens that expression (as a share link would)
+// instead of a preset; NAME then labels the files.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,10 +33,10 @@ try {
   const only = process.env.VIEWS ? process.env.VIEWS.split(',') : null;
   for (const v of views.filter((x) => !only || only.includes(x.name))) {
     const page = await chrome.openPage(v);
-    await page.navigate(base);
+    await page.navigate(process.env.SRC ? `${base}#e=${encodeURIComponent(process.env.SRC)}` : base);
     await page.waitFor("document.documentElement.dataset.state === 'ready'");
     await page.evaluate('document.fonts.ready.then(() => true)');
-    if (presetArg) {
+    if (presetArg && presetArg !== '-') {
       await page.evaluate(`document.querySelector('[data-preset="${presetArg}"]').click(), true`);
     }
     if (stepArg) {
@@ -43,7 +45,8 @@ try {
     await new Promise((r) => setTimeout(r, 700));
     const full = process.env.FULL === '1';
     const png = await page.screenshot(full ? { captureBeyondViewport: true } : {});
-    const file = join(outDir, `${v.name}${presetArg ? `-${presetArg}` : ''}${stepArg ? `-s${stepArg}` : ''}.png`);
+    const label = process.env.NAME ?? presetArg;
+    const file = join(outDir, `${v.name}${label ? `-${label}` : ''}${stepArg ? `-s${stepArg}` : ''}.png`);
     writeFileSync(file, png);
     const scroll = await page.evaluate('document.documentElement.scrollWidth - window.innerWidth');
     console.log(`${file}  (horizontal overflow: ${scroll}px)  problems: ${JSON.stringify(page.problems)}`);

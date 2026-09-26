@@ -23,8 +23,16 @@
   --lift: rgba(70, 46, 16, 0.2);
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 1px 1px rgba(70, 46, 16, 0.12), 0 3px 7px -3px rgba(70, 46, 16, 0.28);
   --shadow-hi: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 2px 2px rgba(70, 46, 16, 0.12), 0 10px 18px -8px rgba(70, 46, 16, 0.45);
+  /* Stage cards: a lit top edge, the paper's cut edge, and a drop shadow
+     whose offset grows with nesting depth (see .card). */
+  --card-hi: rgba(255, 255, 255, 0.6);
+  --card-cut: rgba(92, 62, 24, 0.3);
+  --card-drop: rgba(70, 46, 16, 0.34);
   --verm: #df4428;
   --verm-wash: rgba(223, 68, 40, 0.1);
+  --verm-mix: 28%;
+  --verm-fill: #b8341c;
+  --on-verm: #fffaf0;
   --index: #fdfbf5;
   --rule: #a9bdd2;
   --head-rule: #45688c;
@@ -38,14 +46,14 @@
   :root:not([data-theme="light"]) {
     --desk: #201811;
     --sheet: #2b2118;
-    --c0: #4b3c2d;
-    --c1: #463829;
-    --c2: #413426;
-    --c3: #3c3023;
-    --c4: #382c20;
-    --c5: #34291e;
-    --c6: #30261c;
-    --c7: #2d231a;
+    --c0: #4e3e2d;
+    --c1: #453728;
+    --c2: #3d3023;
+    --c3: #35291e;
+    --c4: #30251b;
+    --c5: #2c2219;
+    --c6: #292017;
+    --c7: #261e16;
     --ink: #f2e8d4;
     --ink-2: #cdbd9f;
     --paren: #c4b193;
@@ -53,8 +61,14 @@
     --lift: rgba(0, 0, 0, 0.5);
     --shadow: 0 1px 0 rgba(255, 236, 200, 0.07) inset, 0 1px 1px rgba(0, 0, 0, 0.35), 0 3px 8px -3px rgba(0, 0, 0, 0.6);
     --shadow-hi: 0 1px 0 rgba(255, 236, 200, 0.08) inset, 0 2px 2px rgba(0, 0, 0, 0.35), 0 10px 20px -8px rgba(0, 0, 0, 0.8);
+    --card-hi: rgba(255, 236, 200, 0.12);
+    --card-cut: rgba(0, 0, 0, 0.6);
+    --card-drop: rgba(0, 0, 0, 0.6);
     --verm: #ff6a48;
     --verm-wash: rgba(255, 106, 72, 0.13);
+    --verm-mix: 26%;
+    --verm-fill: #ff6a48;
+    --on-verm: #1c140e;
     --index: #33291f;
     --rule: rgba(150, 178, 206, 0.32);
     --head-rule: #8fb0d2;
@@ -99,7 +113,7 @@ button, input, textarea, select {
 /* ---------------------------------------------------------------- masthead */
 
 .masthead {
-  max-width: 1320px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 28px 24px 10px;
   display: flex;
@@ -151,19 +165,32 @@ button, input, textarea, select {
 
 /* ---------------------------------------------------------------- the desk */
 
+/* Wide screens: source | stage | environment, so the stage, its caption
+   and the environment are all in view at once. */
 .desk {
-  max-width: 1320px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 12px 24px 24px;
   display: grid;
-  grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(250px, 270px) minmax(0, 1fr) minmax(210px, 236px);
   grid-template-areas:
-    "examples stage"
-    "source   stage"
-    "env      stage";
+    "examples stage env"
+    "source   stage env"
+    ".        stage env";
   grid-template-rows: auto auto 1fr;
-  gap: 20px 28px;
+  gap: 20px 24px;
   align-items: start;
+}
+
+@media (max-width: 1179px) {
+  .desk {
+    grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
+    grid-template-areas:
+      "examples stage"
+      "source   stage"
+      "env      stage";
+    gap: 20px 28px;
+  }
 }
 
 .examples { grid-area: examples; min-width: 0; }
@@ -281,7 +308,7 @@ button, input, textarea, select {
 .stage {
   position: relative;
   min-height: 380px;
-  padding: 26px 26px 30px;
+  padding: 24px 22px 30px;
   background-color: var(--sheet);
   background-image: inherit;
   border-radius: 2px;
@@ -314,8 +341,13 @@ button, input, textarea, select {
   white-space: pre;
 }
 
-/* A card is a sheet of paper; each nesting level is a slightly darker one. */
+/* A card is a sheet of paper cut out and stacked on the one that holds it.
+   Each nesting level is a darker shade and sits higher: its cut edge
+   thickens and its shadow falls further, by --z. */
 .card {
+  --d: 0;
+  --z: var(--d);
+  --bg: var(--c0);
   position: relative;
   display: inline-flex;
   flex-direction: column;
@@ -324,19 +356,21 @@ button, input, textarea, select {
   padding: 0.14em 0.5ch 0.2em;
   border: 1px solid var(--edge);
   border-radius: 2px;
-  background-color: var(--c0);
-  box-shadow: var(--shadow);
+  background-color: var(--bg);
+  box-shadow:
+    0 1px 0 var(--card-hi) inset,
+    0 calc(1px + var(--z) * 0.5px) 0 var(--card-cut),
+    0 calc(2px + var(--z) * 1.5px) calc(4px + var(--z) * 2px) calc(-2px - var(--z) * 0.5px) var(--card-drop);
   transform-origin: 50% 0;
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
-.card.redex > .tab { box-shadow: 0 -2px 4px -2px var(--lift); }
-.card.d1 { background-color: var(--c1); }
-.card.d2 { background-color: var(--c2); }
-.card.d3 { background-color: var(--c3); }
-.card.d4 { background-color: var(--c4); }
-.card.d5 { background-color: var(--c5); }
-.card.d6 { background-color: var(--c6); }
-.card.d7 { background-color: var(--c7); }
+.card.d1 { --d: 1; --bg: var(--c1); }
+.card.d2 { --d: 2; --bg: var(--c2); }
+.card.d3 { --d: 3; --bg: var(--c3); }
+.card.d4 { --d: 4; --bg: var(--c4); }
+.card.d5 { --d: 5; --bg: var(--c5); }
+.card.d6 { --d: 6; --bg: var(--c6); }
+.card.d7 { --d: 7; --bg: var(--c7); }
 
 .ln {
   display: flex;
@@ -388,20 +422,41 @@ button, input, textarea, select {
 
 .card.pick { padding-left: 0.6ch; }
 
-/* The redex: the one sub-expression about to reduce. */
-.redex {
-  outline: 2px solid var(--verm);
-  outline-offset: 1px;
-}
+/* The redex: the one sub-expression about to reduce. A card is washed
+   vermilion, ringed, lifted two levels and dog-eared (it is about to fold);
+   a single name or value becomes a solid vermilion chip. */
 .card.redex {
+  --z: calc(var(--d) + 2);
   background-image: linear-gradient(var(--verm-wash), var(--verm-wash));
-  box-shadow: var(--shadow-hi);
+  outline: 2px solid var(--verm);
+  outline-offset: 0;
   transform: translateY(-1px);
   z-index: 1;
 }
+@supports (background-color: color-mix(in srgb, red 50%, blue)) {
+  .card.redex {
+    background-color: color-mix(in srgb, var(--verm) var(--verm-mix), var(--bg));
+    background-image: none;
+  }
+}
+.card.redex > .ln > .br { color: var(--ink); }
+.card.redex::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  border-style: solid;
+  border-width: 0 0.78em 0.78em 0;
+  border-color: transparent var(--verm) transparent transparent;
+  filter: drop-shadow(-1px 1px 0 var(--card-cut));
+  pointer-events: none;
+}
+.card.redex > .tab { box-shadow: 0 -2px 4px -2px var(--lift); outline: 2px solid var(--verm); outline-offset: 0; clip-path: inset(-3px -3px 0 -3px); }
 .atom.redex {
-  background: var(--verm-wash);
-  outline-offset: 0;
+  background: var(--verm-fill);
+  color: var(--on-verm);
+  box-shadow: 0 0 0 0.16em var(--verm-fill);
+  outline: 0;
 }
 
 .ghosts {
@@ -668,7 +723,7 @@ button, input, textarea, select {
 /* ---------------------------------------------------------------- colophon */
 
 .colophon {
-  max-width: 1320px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 8px 24px 40px;
   font-size: 12.5px;
