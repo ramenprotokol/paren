@@ -94,6 +94,18 @@
     (symbol (name s))
     s))
 
+(defn- interop?
+  "Java/JavaScript interop: (.method obj), (Class. x), (. obj m),
+  Math/abs, java.util.Date/now and js/alert."
+  [s]
+  (let [n (name s)
+        ns (namespace s)]
+    (boolean
+     (or (= "." n)
+         (and (> (count n) 1) (or (str/starts-with? n ".") (str/ends-with? n ".")))
+         (= "js" ns)
+         (and ns (re-find #"^[A-Z]" (peek (str/split ns #"\."))))))))
+
 (defn val-node [x] {:t :val :v x})
 
 (defn- val-node? [n] (= :val (:t n)))
@@ -252,52 +264,62 @@
   "One read form -> one tree node. Throws ex-info with :paren/kind on
   anything outside the subset."
   [ctx form]
-  (cond
-    (or (nil? form) (boolean? form) (number? form) (string? form) (keyword? form))
-    (val-node form)
+  (let [top? (:top? ctx)
+        ctx (dissoc ctx :top?)]
+    (cond
+      (or (nil? form) (boolean? form) (number? form) (string? form) (keyword? form))
+      (val-node form)
 
-    (symbol? form)
-    (let [s (norm form)]
-      (cond
-        (namespace s)
-        (fail! :unsupported (str "Namespaced symbols such as `" form "` aren't in paren's teaching subset."))
-        (special-forms s)
-        (fail! :syntax (str "`" s "` is a special form, so it only works at the start of a list, like (" s " …)."))
-        (= s '&) (fail! :syntax "`&` only belongs in a parameter list.")
-        (and (unsupported-names (str s)) (not ((:bound ctx) s))) (unsupported-name! s)
-        :else {:t :sym :s s}))
+      (symbol? form)
+      (let [s (norm form)]
+        (cond
+          (interop? s)
+          (fail! :unsupported (str "Java/JavaScript interop (`" form "`) isn't in paren's teaching subset."))
+          (namespace s)
+          (fail! :unsupported (str "Namespaced symbols such as `" form "` aren't in paren's teaching subset."))
+          (special-forms s)
+          (fail! :syntax (str "`" s "` is a special form, so it only works at the start of a list, like (" s " …)."))
+          (= s '&) (fail! :syntax "`&` only belongs in a parameter list.")
+          (and (unsupported-names (str s)) (not ((:bound ctx) s))) (unsupported-name! s)
+          :else {:t :sym :s s}))
 
-    (seq? form)
-    (if (empty? form)
-      (val-node ())
-      (let [[head & args] form
-            h (when (symbol? head) (norm head))]
-        (if (special-forms h)
-          (parse-special ctx h args)
-          {:t :call :f (parse ctx head) :args (parse-body ctx args)})))
+      (seq? form)
+      (if (empty? form)
+        (val-node ())
+        (let [[head & args] form
+              h (when (symbol? head) (norm head))]
+          (cond
+            ;; Only at the top level: then nothing can rebind a name while a
+            ;; call's arguments run, so looking a function up when it is
+            ;; called gives the same result as Clojure's operator-first order.
+            (and (#{'def 'defn} h) (not top?))
+            (fail! :unsupported (str "`" h "` inside another form isn't in paren's teaching subset; write each `"
+                                     h "` at the top level, on its own."))
+            (special-forms h) (parse-special ctx h args)
+            :else {:t :call :f (parse ctx head) :args (parse-body ctx args)})))
 
-    (vector? form)
-    (let [items (parse-body ctx form)]
-      (if (every? val-node? items)
-        (val-node (mapv :v items))
-        {:t :vec :items items}))
+      (vector? form)
+      (let [items (parse-body ctx form)]
+        (if (every? val-node? items)
+          (val-node (mapv :v items))
+          {:t :vec :items items}))
 
-    (map? form)
-    (let [entries (mapv (fn [[k x]] [(parse ctx k) (parse ctx x)]) form)]
-      (if (every? (fn [[k x]] (and (val-node? k) (val-node? x))) entries)
-        (val-node (into {} (map (fn [[k x]] [(:v k) (:v x)])) entries))
-        {:t :map :entries entries}))
+      (map? form)
+      (let [entries (mapv (fn [[k x]] [(parse ctx k) (parse ctx x)]) form)]
+        (if (every? (fn [[k x]] (and (val-node? k) (val-node? x))) entries)
+          (val-node (into {} (map (fn [[k x]] [(:v k) (:v x)])) entries))
+          {:t :map :entries entries}))
 
-    (set? form) (fail! :unsupported "Sets (#{…}) aren't in paren's teaching subset.")
-    (regexp? form) (fail! :unsupported "Regular expressions (#\"…\") aren't in paren's teaching subset.")
-    :else (fail! :unsupported (str "This kind of literal (" (pr-str form) ") isn't in paren's teaching subset."))))
+      (set? form) (fail! :unsupported "Sets (#{…}) aren't in paren's teaching subset.")
+      (regexp? form) (fail! :unsupported "Regular expressions (#\"…\") aren't in paren's teaching subset.")
+      :else (fail! :unsupported (str "This kind of literal (" (pr-str form) ") isn't in paren's teaching subset.")))))
 
 (defn parse-program
   "Read forms -> {:tree top-node} or {:error {:kind :message}}."
   [forms]
   (try
     (let [ctx {:bound (bound-names forms)}]
-      {:tree {:t :top :forms (mapv #(parse ctx %) forms)}})
+      {:tree {:t :top :forms (mapv #(parse (assoc ctx :top? true) %) forms)}})
     (catch :default e
       (if-let [kind (:paren/kind (ex-data e))]
         {:error {:kind kind :message (ex-message e)}}

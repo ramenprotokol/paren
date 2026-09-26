@@ -92,6 +92,12 @@
        (not (contains? (:globals st) s))
        (some? (b/lookup s))))
 
+(defn- shadowed-builtin?
+  "A built-in's name that a local or a `def` has taken over, as in
+  (let [inc dec] (inc 5))."
+  [st env s]
+  (and (some? (b/lookup s)) (not (builtin-sym? st env s))))
+
 (defn- let-env [n env]
   {:fid (:fid n)
    :label "let"
@@ -125,6 +131,51 @@
     :seq (apply list (map value-of (:items n)))
     :map (into {} (map (fn [[k x]] [(value-of k) (value-of x)])) (:entries n))))
 
+(defn duplicate-key
+  "For a finished map node: [k] for the first key that appears twice, else nil."
+  [n]
+  (loop [seen #{} es (seq (:entries n))]
+    (when es
+      (let [k (value-of (ffirst es))]
+        (if (contains? seen k) [k] (recur (conj seen k) (next es)))))))
+
+(defn- node-size
+  "b/value-size of the value a finished collection node would make, without
+  making it (building a map hashes its keys, which is what the size cap
+  keeps cheap)."
+  [n]
+  (let [add (fn [acc x]
+              (let [acc (+ acc x)]
+                (if (> acc b/max-value) (reduced acc) acc)))
+        size-of #(b/value-size (value-of %))]
+    (if (= :map (:t n))
+      (reduce (fn [acc [k x]] (add acc (+ 1 (size-of k) (size-of x)))) 1 (:entries n))
+      (reduce (fn [acc x] (add acc (size-of x))) 1 (:items n)))))
+
+(declare show)
+
+(defonce ^:private problems (js/WeakMap.))
+
+(defn collection-problem
+  "Why a finished vector, map or list node can't become a value, or nil:
+  it would be larger than paren's value cap, or it is a map with a key
+  twice (Clojure throws \"Duplicate key\" for {(+ 1 1) 1 2 3}). Cached per
+  node; unchanged nodes are shared from step to step."
+  [n]
+  (let [known (.get problems n)]
+    (if (some? known)
+      (when (string? known) known)
+      (let [p (cond
+                (> (node-size n) b/max-value)
+                (b/value-cap-message (case (:t n)
+                                       :vec "This vector"
+                                       :map "This map"
+                                       (str "The list built by `" (:from n) "`")))
+                (= :map (:t n))
+                (when-let [[k] (duplicate-key n)] (str "Duplicate key: " (show k))))]
+        (.set problems n (or p false))
+        p))))
+
 ;; ---------------------------------------------------------------------------
 ;; Finding the redex
 
@@ -149,19 +200,29 @@
     (case (:t n)
       :val nil
       :sym (when-not (evaluated? st env n) here)
-      (:vec :seq) (redex-in st (:items n) env (conj path :items) depth)
+      ;; A finished collection is a redex only when it can't become a
+      ;; value (see collection-problem); that step reports the problem.
+      (:vec :seq) (or (redex-in st (:items n) env (conj path :items) depth)
+                      (when (collection-problem n) here))
       :map (let [es (:entries n)]
-             (loop [i 0]
-               (when (< i (count es))
-                 (let [[k x] (nth es i)]
-                   (or (find-redex st k env (conj path :entries i 0) depth)
-                       (find-redex st x env (conj path :entries i 1) depth)
-                       (recur (inc i)))))))
+             (or (loop [i 0]
+                   (when (< i (count es))
+                     (let [[k x] (nth es i)]
+                       (or (find-redex st k env (conj path :entries i 0) depth)
+                           (find-redex st x env (conj path :entries i 1) depth)
+                           (recur (inc i))))))
+                 (when (collection-problem n) here)))
       :call (let [f (:f n)]
               (or (if (= :sym (:t f))
-                    ;; A named function is looked up when it is called; an
-                    ;; unknown name fails first, as in Clojure.
-                    (when-not (resolve-sym st env (:s f))
+                    ;; A named function is looked up when it is called, after
+                    ;; its arguments. `def` only works at the top level and
+                    ;; locals never change, so the name can't be rebound in
+                    ;; between: the result is the same as Clojure's
+                    ;; operator-first order. An unknown name fails first, as
+                    ;; in Clojure, and a built-in's name that a local or def
+                    ;; has taken over gets a visible lookup step.
+                    (when (or (nil? (resolve-sym st env (:s f)))
+                              (shadowed-builtin? st env (:s f)))
                       {:path (conj path :f) :env env :depth depth})
                     (find-redex st f env (conj path :f) depth))
                   (redex-in st (:args n) env (conj path :args) depth)
@@ -330,8 +391,11 @@
       (b/fail (b/arity-message fname n np (when-not r np))))
     (when (>= depth max-depth)
       (throw (ex-info (depth-message fname depth) {:paren/cap :depth})))
-    (let [vars (cond-> (mapv vector ps args)
-                 r (conj [r (when (> n np) (apply list (drop np args)))]))]
+    (let [more (when (> n np) (apply list (drop np args)))
+          _ (when (and more (b/too-big? more))
+              (b/fail (b/value-cap-message (str "The rest argument `" r "`"))))
+          vars (cond-> (mapv vector ps args)
+                 r (conj [r more]))]
       {:st (update st :next-fid inc)
        :node {:t :scope
               :fid (:next-fid st)
@@ -361,6 +425,8 @@
       (if (b/stepped? fv)
         (unfold fv args)
         (let [x (b/call fv args)]
+          (when (b/too-big? x)
+            (b/fail (b/value-cap-message (str "The result of `" fname "`"))))
           {:node (val-node x)
            :caption (str "apply `" fname "` to " (args-desc args) " → " (show x))}))
 
@@ -491,6 +557,12 @@
 
     :quote
     {:node (val-node (:v n)) :caption (str "`quote` returns " (show (:v n)) " without evaluating it")}
+
+    ;; Only reached when the collection can't become a value.
+    (:vec :seq :map)
+    (if-let [p (collection-problem n)]
+      (b/fail p)
+      {:node (val-node (value-of n)) :caption (str "build " (show (value-of n)))})
 
     :pick
     (let [t (value-of (:test n))]

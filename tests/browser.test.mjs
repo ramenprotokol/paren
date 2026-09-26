@@ -132,6 +132,46 @@ test('desktop: step through, scrub, presets, errors, share link', { skip, timeou
   });
 });
 
+// A share link runs its expression as the page loads, so a crafted one must
+// not be able to hang a visitor's tab. Each of these once could (or showed
+// "step NaN"); now each must settle within a few seconds.
+const withinMs = (ms, promise, what) =>
+  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(`${what} took over ${ms} ms`)), ms))]);
+
+test('hostile or malformed share links settle fast with a clear message', { skip, timeout: 120000 }, async () => {
+  await withSite(async (url, chrome) => {
+    const hostile = [
+      ['(range 0 10 ##NaN)', /^range needs finite numbers, but got ##NaN$/],
+      ['(range 0 10 (/ 0 0))', /^range needs finite numbers, but got ##NaN$/],
+      ['(range 100000000000000000 100000000000000400 0.5)', /more than 1000 numbers/],
+      ['(defn g [v n] (if (= n 0) v (g [v v] (dec n)))) (= (g [] 40) (g [] 40))',
+        /^This vector would hold more than 10,000 items/],
+      ['{(+ 1 1) 1 2 3}', /^Duplicate key: 2$/],
+    ];
+    for (const [src, message] of hostile) {
+      const page = await chrome.openPage({ width: 1280, height: 800 });
+      await page.navigate(`${url}#e=${encodeURIComponent(src)}&s=99999`);
+      await withinMs(5000, page.waitFor(ready, 5000), `loading a link to ${src}`);
+      // s=99999 is clamped to the last step: the one that stopped.
+      assert.match(await page.evaluate(text('#caption-text')), message, src);
+      assert.match(await page.evaluate("document.getElementById('caption').className"), /stopped/, src);
+      assert.deepEqual(appProblems(page.problems), [], src);
+      await page.close();
+    }
+
+    const src = encodeURIComponent('(+ 1 (* 2 3))'); // 2 steps
+    for (const [s, shown] of [['abc', 0], ['', 0], ['-4', 0], ['2.9', 2], ['1e3', 1], ['99999', 2]]) {
+      const page = await chrome.openPage({ width: 1280, height: 800 });
+      await page.navigate(`${url}#e=${src}&s=${s}`);
+      await page.waitFor(ready);
+      assert.equal(await page.evaluate(text('#counter')), `step ${shown} of 2`, `s=${s}`);
+      assert.equal(await page.evaluate("document.getElementById('scrub').value"), String(shown), `s=${s}`);
+      assert.deepEqual(appProblems(page.problems), []);
+      await page.close();
+    }
+  });
+});
+
 test('phone width (400 px, emulated): no horizontal page scroll at any fib step', { skip, timeout: 120000 }, async () => {
   await withSite(async (url, chrome) => {
     const page = await chrome.openPage({ width: 400, height: 860, mobile: true, scale: 2 });

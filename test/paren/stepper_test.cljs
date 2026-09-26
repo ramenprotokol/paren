@@ -234,3 +234,40 @@
   (is (= "{:a [1 \"s\"], :b nil}" (v/show {:a [1 "s"] :b nil})))
   (is (= "##Inf" (v/show (result "(/ 1 0)"))))
   (is (= "[1 2 3 4 5 6 7 8 9 1…" (v/show (vec (range 1 20)) 20))))
+
+(deftest shadowed-built-ins-get-a-lookup-step
+  (testing "a local that takes over a built-in's name is looked up, like any local"
+    (is (= ["bind `inc` = dec" "look up `inc` → dec" "apply `dec` to 5 → 4" "`let` returns 4" "done → 4"]
+           (caps "(let [inc dec] (inc 5))"))))
+  (testing "so is a def that takes over a built-in's name"
+    (is (= ["define `inc` as a function" "look up `inc` → ‹fn inc›" "enter `inc` with x = 1"
+            "look up `x` → 1" "`inc` returns 1" "done → 1"]
+           (caps "(defn inc [x] x) (inc 1)"))))
+  (testing "an unshadowed built-in still costs no step"
+    (is (= ["apply `inc` to 5 → 6" "done → 6"] (caps "(inc 5)")))))
+
+(deftest step-order-cannot-change-a-result
+  (testing "def only works at the top level, so a name can't be rebound while a call's arguments run"
+    (let [t (s/run "(def g dec) (g (do (def g inc) 1))")]
+      (is (= :error (:status t)))
+      (is (= :unsupported (:kind t)))
+      (is (= (str "`def` inside another form isn't in paren's teaching subset; "
+                  "write each `def` at the top level, on its own.")
+             (:message t)))))
+  (is (= :unsupported (:kind (s/run "(defn f [] (defn g [] 1)) (f)"))))
+  (is (= :unsupported (:kind (s/run "(let [a 1] (def b a) b)"))))
+  (testing "top-level defs still work, including redefinition"
+    (is (= 2 (result "(def g dec) (def g inc) (g 1)")))
+    (is (= 0 (result "(def g dec) (g 1)")))))
+
+(deftest duplicate-computed-map-keys
+  (testing "like Clojure, a map literal whose keys turn out equal is an error"
+    (let [t (s/run "{(+ 1 1) 1 2 3}")
+          last-frame (peek (:frames t))]
+      (is (= :error (:status t)))
+      (is (= "Duplicate key: 2" (:message t)))
+      (is (= [:forms 0] (:redex last-frame)) "the map itself is highlighted")))
+  (is (= "Duplicate key: :a" (message "(count {(first [:a]) 1 :a 2})")))
+  (is (= "Duplicate key: [1]" (message "(def x 1) {[x] 1 [1] 2}")))
+  (is (= {2 1 3 4} (result "{(+ 1 1) 1 3 4}")) "distinct computed keys are fine"))
+

@@ -4,7 +4,8 @@
 
   `map`, `filter` and `reduce` are listed here, but the stepper runs them
   itself, so that each call they make is a visible step."
-  (:require [paren.values :as v]))
+  (:require [paren.reader :as reader]
+            [paren.values :as v]))
 
 (def max-string
   "Longest string `str` may build. Doubling a string in a loop would
@@ -14,6 +15,13 @@
 (def max-range
   "Most numbers `range` may produce (paren's range is eager, not lazy)."
   1000)
+
+(def max-value
+  "Most items one value may hold, counting everything nested inside it (a
+  part that appears twice counts twice). Doubling a vector in a loop shares
+  structure, so it costs little memory, but comparing, hashing or walking
+  the result would take longer than the age of the universe."
+  10000)
 
 (defn fail
   "Throws an evaluation error with a message meant for the learner."
@@ -30,6 +38,36 @@
   (or (nil? x) (string? x) (vector? x) (plain-map? x) (seq? x) (list? x)))
 
 (defn- s [x] (v/show x 40))
+
+(defonce ^:private sizes (js/WeakMap.))
+
+(defn value-size
+  "Items in x counted as a tree, x itself included: shared parts count
+  each time they appear. Stops counting just past max-value, and remembers
+  each collection's answer, so sizing a value built from sized parts is
+  cheap."
+  [x]
+  (if (and (coll? x) (not (record? x)))
+    (if-let [n (.get sizes x)]
+      n
+      (let [n (loop [xs (seq x) acc 1]
+                (if (and xs (<= acc max-value))
+                  (recur (next xs) (+ acc (value-size (first xs))))
+                  acc))]
+        (.set sizes x n)
+        n))
+    1))
+
+(defn too-big?
+  "True when x holds more than max-value items."
+  [x]
+  (> (value-size x) max-value))
+
+(defn value-cap-message
+  "`who` is a phrase such as \"This vector\"."
+  [who]
+  (str who " would hold more than " (reader/format-count max-value) " items, counting everything nested inside it,"
+       " which is paren's cap for a single value"))
 
 (defn- nums! [fname args]
   (doseq [a args]
@@ -53,16 +91,50 @@
     (nums! fname args)
     (boolean (apply op args))))
 
-(defn- string-cap! [out]
-  (when (> (count out) max-string)
-    (fail (str "`str` built a string longer than " max-string
-               " characters, which is paren's cap for strings")))
-  out)
-
 (defn- str-part [x]
   (cond (nil? x) ""
         (string? x) x
         :else (v/show x (inc max-string))))
+
+(defn- build-str
+  "`str`, stopping as soon as the result passes the string cap."
+  [parts]
+  (let [buf #js []]
+    (loop [xs (seq parts) len 0]
+      (cond
+        (> len max-string)
+        (fail (str "`str` built a string longer than " max-string
+                   " characters, which is paren's cap for strings"))
+        xs (let [p (str-part (first xs))]
+             (.push buf p)
+             (recur (next xs) (+ len (count p))))
+        :else (.join buf "")))))
+
+(defn- finite! [fname args]
+  (doseq [a args]
+    (when-not (js/isFinite a)
+      (fail (str "`" fname "` needs finite numbers, but got " (s a)))))
+  args)
+
+(defn- bounded-range
+  "Clojure's (range start end step), made eagerly, failing past max-range
+  numbers. Whole numbers are counted up front, like cljs.core's
+  IntegerRange; other numbers are added up one step at a time, like its
+  Range, which could otherwise loop forever once `step` is too small to
+  change `start`."
+  [start end step]
+  (let [cap #(fail (str "`range` here would make more than " max-range
+                        " numbers, which is paren's cap for range"))
+        more? (if (pos? step) #(< % end) #(> % end))]
+    (if (and (integer? start) (integer? end) (integer? step))
+      (let [n (max 0 (js/Math.ceil (/ (- end start) step)))]
+        (when (> n max-range) (cap))
+        (apply list (map #(+ start (* % step)) (range n))))
+      (loop [out (transient []) x start]
+        (cond
+          (not (more? x)) (apply list (persistent! out))
+          (>= (count out) max-range) (cap)
+          :else (recur (conj! out x) (+ x step)))))))
 
 ;; name -> [min-args max-args-or-nil impl]
 ;; impl is (fn [fname args] result); arity is checked before it runs.
@@ -131,16 +203,13 @@
    "vector" [0 nil (fn [_ a] (vec a))]
    "list" [0 nil (fn [_ a] (apply list a))]
    "range" [1 3 (fn [f args]
-                  (nums! f args)
+                  (finite! f (nums! f args))
                   (let [[a b c] args
                         [start end step] (case (count args) 1 [0 a 1] 2 [a b 1] [a b c])]
                     (when (zero? step)
                       (fail "`range` with a step of 0 would never end"))
-                    (when (> (js/Math.ceil (/ (- end start) step)) max-range)
-                      (fail (str "`range` here would make more than " max-range
-                                 " numbers, which is paren's cap for range")))
-                    (apply list (range start end step))))]
-   "str" [0 nil (fn [_ a] (string-cap! (apply str (map str-part a))))]
+                    (bounded-range start end step)))]
+   "str" [0 nil (fn [_ a] (build-str a))]
    ;; Run by the stepper so their calls are visible; arity is still checked here.
    "map" [2 nil nil]
    "filter" [2 2 nil]

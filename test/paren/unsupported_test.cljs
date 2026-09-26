@@ -34,7 +34,26 @@
     "(fn [{:keys [a]}] a)"
     "Destructuring ({:keys [a]}) in parameters isn't in paren's teaching subset; bind a single name instead."
     "(defn f ([x] x) ([x y] y))"
-    "Multi-arity functions (`defn` with several parameter lists) aren't in paren's teaching subset."}))
+    "Multi-arity functions (`defn` with several parameter lists) aren't in paren's teaching subset."
+    "(do (def x 1) x)"
+    "`def` inside another form isn't in paren's teaching subset; write each `def` at the top level, on its own."
+    "(let [a 1] (defn f [] a))"
+    "`defn` inside another form isn't in paren's teaching subset; write each `defn` at the top level, on its own."}))
+
+(deftest interop-is-refused-by-name
+  (are-messages
+   {"(.toUpperCase \"a\")" "Java/JavaScript interop (`.toUpperCase`) isn't in paren's teaching subset."
+    "(String. \"a\")" "Java/JavaScript interop (`String.`) isn't in paren's teaching subset."
+    "(. \"a\" toUpperCase)" "Java/JavaScript interop (`.`) isn't in paren's teaching subset."
+    "(.. \"a\" trim toUpperCase)" "Java/JavaScript interop (`..`) isn't in paren's teaching subset."
+    "(Math/abs -1)" "Java/JavaScript interop (`Math/abs`) isn't in paren's teaching subset."
+    "(java.lang.Math/abs -1)" "Java/JavaScript interop (`java.lang.Math/abs`) isn't in paren's teaching subset."
+    "(js/alert 1)" "Java/JavaScript interop (`js/alert`) isn't in paren's teaching subset."
+    "js/document" "Java/JavaScript interop (`js/document`) isn't in paren's teaching subset."
+    "(map .length [\"a\"])" "Java/JavaScript interop (`.length`) isn't in paren's teaching subset."})
+  (testing "an ordinary namespaced symbol keeps its own message"
+    (is (= "Namespaced symbols such as `clojure.string/join` aren't in paren's teaching subset."
+           (:message (s/run "(clojure.string/join [1])"))))))
 
 (defn are-messages [m]
   (doseq [[src msg] m]

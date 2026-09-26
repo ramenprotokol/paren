@@ -36,7 +36,10 @@
   (case (:t n)
     :val true
     (:vec :seq) (every? flat-value? (:items n))
-    :map (every? (fn [[k x]] (and (flat-value? k) (flat-value? x))) (:entries n))
+    ;; A map with a key twice can't be one value; it stays a card of
+    ;; entries while its "Duplicate key" error shows.
+    :map (and (every? (fn [[k x]] (and (flat-value? k) (flat-value? x))) (:entries n))
+              (nil? (s/duplicate-key n)))
     false))
 
 (defn- value-class [x]

@@ -16,11 +16,19 @@
    "(defn inc [x] x) (inc 1)" "(if)" ")" "(" "#" "#_ 1" "\\a" "(:a)" "([1] 1 2)"
    "(reduce + 1)" "(range)" "(and (or) (and))" "(cond :else)" "(do (def x 1) (def x 2) x)"
    "(fn [x x] x)" "((fn [x x] x) 1 2)" "'(1 (2 [3 {:a 4}]))" "(#{1} 1)" "#inst \"2020\""
-   "::kw" "(defn f [n] (if (> n 0) (f (- n 1)) :done)) (f 99)"])
+   "::kw" "(defn f [n] (if (> n 0) (f (- n 1)) :done)) (f 99)"
+   ;; Found in review: each once hung the tab, reached the runtime, or read oddly.
+   "(range 0 10 ##NaN)" "(range 0 10 (/ 0 0))" "(range 100000000000000000 100000000000000400 0.5)"
+   "(defn g [v n] (if (= n 0) v (g [v v] (dec n)))) (= (g [] 40) (g [] 40))"
+   "(defn g [v n] (if (= n 0) v (g [v v] (dec n)))) {(g [] 40) 1}"
+   "`(1 2)" "(.toUpperCase \"a\")" "(String. \"a\")" "(. \"a\" toUpperCase)" "(Math/abs -1)"
+   "{(+ 1 1) 1 2 3}" "(def g dec) (g (do (def g inc) 1))" "(str (range 1000) (range 1000) (range 1000))"])
 
 (deftest odd-inputs-never-hit-an-internal-error
   (doseq [src odd-inputs]
-    (let [t (s/run src)]
+    (let [t0 (js/Date.now)
+          t (s/run src)]
+      (is (< (- (js/Date.now) t0) 3000) (str "finishes promptly: " src))
       (is (#{:done :error :step-cap :depth-cap :size-cap} (:status t)) src)
       (is (not (str/includes? (str (:message t)) "internal error")) src)
       (when (= :error (:status t))

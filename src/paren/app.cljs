@@ -339,10 +339,17 @@
 ;; ---------------------------------------------------------------------------
 ;; URL: #e=<expression>&s=<step>
 
+(defn- parse-step
+  "\"12\" -> 12. Anything that isn't a number (s=abc) -> nil, so a
+  hand-edited link opens at the first step instead of \"step NaN\"."
+  [s]
+  (let [n (js/parseInt s 10)]
+    (when-not (js/isNaN n) n)))
+
 (defn- read-hash []
   (let [params (js/URLSearchParams. (subs (.-hash js/location) 1))]
     {:src (.get params "e")
-     :step (some-> (.get params "s") js/parseInt)}))
+     :step (some-> (.get params "s") parse-step)}))
 
 (defn share-url [src i]
   (let [params (js/URLSearchParams.)]
@@ -399,12 +406,13 @@
   ([src start]
    (stop-play!)
    (clear-ghosts!)
-   (let [t (s/run src)]
+   (let [t (s/run src)
+         start (if (and (number? start) (js/isFinite start)) start 0)]
      (if (seq (:frames t))
        (let [n (dec (count (:frames t)))]
          (show-src-error! nil)
          (reset! app {:trace (assoc t :width (trace-width t)) :src src
-                      :i (max 0 (min n (or start 0))) :playing? false})
+                      :i (max 0 (min n start)) :playing? false})
          (pick-scale!)
          (render!)
          (write-hash!))
@@ -466,7 +474,8 @@
         (str "Caps: " (reader/format-count reader/max-chars) " characters of input, "
              reader/max-nesting " levels of brackets, "
              (reader/format-count s/max-steps) " steps, " s/max-depth " nested calls, "
-             (reader/format-count s/max-nodes) " boxes on the stage.")))
+             (reader/format-count s/max-nodes) " boxes on the stage, "
+             (reader/format-count b/max-value) " items in one value.")))
 
 (defn- step-button! [id f]
   (listen! id "click" (fn [] (stop-play!) (go-to! (f)) (write-hash!))))

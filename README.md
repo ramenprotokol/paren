@@ -21,9 +21,9 @@ The examples are recursive `fib`, `(reduce + (map inc [1 2 3]))`, `let` scoping,
 Everything that matters is ClojureScript under `src/paren/`.
 
 - **Reading.** `reader.cljs` uses `cljs.tools.reader`, the real Clojure reader ported to ClojureScript, to turn the text into Clojure data: lists, vectors, maps, symbols. Code is data from here on. Input is capped at 2,000 characters.
-- **Checking the subset.** `syntax.cljs` walks that data and builds an expression tree. Anything outside the subset is refused before a single step runs, with a message that names it. Examples: ``loop` isn't in paren's teaching subset (write it as plain recursion instead)``, and ``Destructuring ([a b]) in `let` isn't in paren's teaching subset``. Malformed special forms get their own messages, such as ``let` bindings come in pairs``.
+- **Checking the subset.** `syntax.cljs` walks that data and builds an expression tree. Anything outside the subset is refused before a single step runs, with a message that names it. Examples: ``loop` isn't in paren's teaching subset (write it as plain recursion instead)``, ``Destructuring ([a b]) in `let` isn't in paren's teaching subset``, ``Java/JavaScript interop (`.toUpperCase`) isn't in paren's teaching subset``, and syntax-quote (the backtick). Malformed special forms get their own messages, such as ``let` bindings come in pairs``.
 - **Stepping.** `stepper.cljs` is a small-step evaluator.
-  - Each step finds the redex under Clojure's order: the operator first, then the arguments left to right, innermost first.
+  - Each step finds the redex in Clojure's order: arguments left to right, innermost first. An operator that is itself an expression, as in `((fn [x] x) 1)`, is evaluated before them. A named function such as `fib` is looked up when the call happens (see [Honest limitations](#honest-limitations) for why that gives Clojure's results).
   - It replaces the redex with what it reduces to: a value, the chosen branch of an `if`, or a function body.
   - A function call becomes a `:scope` node that holds the call's bindings and the closure's captured environment. Lookups walk that chain of frames, then the globals made by `def`, then the built-ins.
   - `map`, `filter` and `reduce` unfold into the calls they will make, so a user function passed to `map` shows every call as its own steps.
@@ -36,7 +36,7 @@ Everything that matters is ClojureScript under `src/paren/`.
 | | |
 |---|---|
 | Data | numbers, strings, keywords, `nil`, `true`/`false`, vectors, maps, quoted lists (`'(1 2 3)`) |
-| Special forms | `def` `defn` `fn` `let` `if` `cond` `do` `and` `or` `quote`, plus `#(…)` short functions |
+| Special forms | `def` `defn` (at the top level) `fn` `let` `if` `cond` `do` `and` `or` `quote`, plus `#(…)` short functions |
 | Built-ins | `+ - * / inc dec mod rem quot max min = not= < > <= >= zero? pos? neg? even? odd? nil? not empty? count first rest cons conj get assoc nth vector list range str map filter reduce` |
 | Also | recursion, closures, rest parameters (`[x & more]`), keywords, maps and vectors used as functions |
 
@@ -48,7 +48,10 @@ Semantics follow ClojureScript: numbers are JavaScript numbers, so `(/ 1 3)` is 
 - 5,000 steps. The steps up to the cap stay scrubbable.
 - 100 function calls in progress at once (the recursion cap).
 - 2,500 boxes on the stage.
-- `str` results up to 10,000 characters, and `range` up to 1,000 numbers.
+- 10,000 items in any one value, counting everything nested inside it. Doubling a vector 40 times shares structure, so it costs almost no memory, but comparing two such values would walk 2^40 items. The cap stops the program at the step that would build the value.
+- `str` results up to 10,000 characters, and `range` up to 1,000 numbers. `range` only takes finite numbers.
+
+A share link runs its expression as the page loads, so these caps also keep a crafted link from hanging a visitor's tab. The browser test opens such links and checks that each one stops within a few seconds with its message.
 
 ## Why ClojureScript
 
@@ -86,18 +89,19 @@ npm test
 
 This runs three things:
 
-1. **ClojureScript tests** (`shadow-cljs` `:node-test`, `test/paren/`), 46 tests with 571 assertions:
-   - the stepper on each supported form, with its exact captions and values;
+1. **ClojureScript tests** (`shadow-cljs` `:node-test`, `test/paren/`), 55 tests with 819 assertions:
+   - the stepper on each supported form, with its exact captions and values, including lookup steps for shadowed built-ins and `Duplicate key` for computed map keys;
    - **golden caption sequences** for all five examples, every step in order, plus their final values;
-   - the step cap, the recursion cap, the size cap, and the `str`/`range` caps;
-   - an exact message for each unsupported form and each malformed special form;
-   - the reader error path (unbalanced input, EOF, oversized, over-nested and empty input, syntax-quote);
-   - layout: line breaking, the redex always present in the display tree, and the environment cards;
-   - 58 odd or hostile inputs, each of which must end in a clear status and never an internal error.
+   - the step cap, the recursion cap, the size cap, the value cap (the doubling program above must stop in under 2 seconds), and the `str`/`range` caps, including `NaN` and a step too small to move;
+   - `range` matching ClojureScript's own, number for number;
+   - an exact message for each unsupported form (including interop and a nested `def`) and each malformed special form;
+   - the reader error path (unbalanced input, EOF, oversized, over-nested and empty input, syntax-quote), with the position given once;
+   - layout: line breaking, the redex always present in the display tree (also on the step that fails), and the environment cards;
+   - 71 odd or hostile inputs, each of which must end in a clear status within 3 seconds and never an internal error.
 2. **The build.**
 3. **Node tests** (`tests/`):
-   - a `dist/` smoke test: hashed files, `_headers`, a 100 KiB gzip budget, and serving with the production headers;
-   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib`, WCAG AA contrast in light and dark, and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
+   - a `dist/` smoke test: hashed files, the third-party notices, `_headers`, a 100 KiB gzip budget, and serving with the production headers;
+   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib`, WCAG AA contrast in light and dark, and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
 
 If Chrome isn't found, the browser tests are skipped. `REQUIRE_BROWSER=1` makes that a failure, and `CHROME_PATH` points at a specific browser.
 
@@ -128,11 +132,11 @@ There is deliberately no `npm run deploy` script and no `account_id` in `wrangle
 
 ## Honest limitations
 
-- **It is a subset, not Clojure.** There are no macros, lazy sequences, destructuring, `loop`/`recur`, sets, multi-arity functions, atoms or printing. Each is refused by name rather than half-supported.
+- **It is a subset, not Clojure.** There are no macros, lazy sequences, destructuring, `loop`/`recur`, sets, multi-arity functions, atoms, printing or Java/JavaScript interop, and `def`/`defn` only work at the top level. Each is refused by name rather than half-supported.
 - **`map`, `filter` and `reduce` are eager.** Every call they make becomes a visible step. Clojure's `map` and `filter` are lazy (and chunked), so an infinite sequence that works in Clojure cannot work here. `range` is capped at 1,000 numbers for the same reason.
 - **Some steps are folded together, on purpose.**
-  - A built-in such as `+` in call position isn't a separate "look up" step, unless a local or `def` shadows it.
-  - A named function (`fib`) in call position is resolved when the call happens, after its arguments. An unknown name still fails before the arguments run, as in Clojure. In this pure subset the order can't change a result.
+  - A built-in such as `+` in call position isn't a separate "look up" step. If a local or `def` has taken over a built-in's name, as in `(let [inc dec] (inc 5))`, that name gets a lookup step like any other.
+  - A named function (`fib`) in call position is looked up when the call happens, after its arguments; Clojure looks it up first. The result is the same because nothing can rebind the name in between: locals never change, and `def`/`defn` only work at the top level. That is why a nested `def`, as in `(def g dec) (g (do (def g inc) 1))`, is refused: in Clojure it gives 0, and an evaluator that looks `g` up late would give 2. An unknown name still fails before the arguments run, as in Clojure.
   - `defn` takes one step, not a macro expansion into `def` + `fn`.
 - **Numbers are JavaScript numbers** (ClojureScript semantics). There are no ratios or big integers, and division by zero gives `##Inf` instead of throwing as JVM Clojure does.
 - **Printing differs from a REPL.** A function prints as `‹fn fib›` or `‹fn [x]›`, where a REPL would print an opaque object.

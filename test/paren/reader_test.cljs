@@ -61,9 +61,23 @@
       (is (= 50 (:result (s/run src)))))))
 
 (deftest syntax-quote-is-named
-  (let [{:keys [error]} (r/read-program "`(a b)")]
-    (is (= :unsupported (:kind error)))
-    (is (re-find #"syntax-quote" (:message error)))))
+  (doseq [src ["`(a b)" "`(1 2)" "(+ 1 `x)" "`[1]"]]
+    (let [{:keys [error]} (r/read-program src)]
+      (is (= :unsupported (:kind error)) src)
+      (is (= r/syntax-quote-message (:message error)) src)))
+  (testing "the message has no raw backtick, which captions use to mark code"
+    (is (not (str/includes? r/syntax-quote-message "`"))))
+  (testing "a backtick in a string, a comment or a character literal is fine"
+    (is (= "`" (:result (s/run "(str \"`\")"))))
+    (is (= 1 (:result (s/run "; a `comment`\n1"))))
+    (is (= "`" (:result (s/run "(str \\`)"))))))
+
+(deftest reader-errors-give-the-position-once
+  (is (= "Couldn't read that: Unmatched delimiter ) (line 1, column 9)."
+         (get-in (r/read-program "(+ 1 2))") [:error :message])))
+  (let [msg (get-in (r/read-program "(defn f [x]\n  (+ x 1)") [:error :message])]
+    (is (not (str/includes? msg "input [")) msg)
+    (is (= 1 (count (re-seq #"line 2" msg))) msg)))
 
 (deftest format-count
   (is (= "5" (r/format-count 5)))

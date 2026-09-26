@@ -44,6 +44,25 @@
         (let [paths (set (keep :path (elements (layout/display (:tree (:st f)) 60))))]
           (is (contains? paths (:redex f)) (str id " step " (:index f))))))))
 
+(deftest error-frames-draw-with-their-redex
+  (testing "the step that fails (a size cap, a duplicate key) is drawn and highlighted"
+    (doseq [src ["{(+ 1 1) 1 2 3}"
+                 "(defn g [v n] (if (= n 0) v (g [v v] (dec n)))) (= (g [] 40) (g [] 40))"
+                 "(range 0 10 ##NaN)"
+                 "(let [inc dec] (inc 5))"]]
+      (let [t (s/run src)
+            f (peek (:frames t))
+            d (layout/display (:tree (:st f)) 60)]
+        (when (:redex f)
+          (is (contains? (set (keep :path (elements d))) (:redex f)) src))
+        (is (seq (layout/env-cards f)) src)
+        (is (number? (layout/widest-form (:tree (:st f)))) src))))
+  (testing "a map with a key twice stays a card of entries, not one misleading value"
+    (let [f (peek (:frames (s/run "{(+ 1 1) 1 2 3}")))
+          m (form (layout/display (:tree (:st f)) 60))]
+      (is (= :card (:k m)))
+      (is (= ["2" "1" "2" "3"] (map :text (:items m)))))))
+
 (deftest scope-cards-carry-a-tab
   (let [f (frame "(defn sq [x] (* x x)) (sq 4)" 2)
         scope (first (filter #(= "scope tabbed" (:cls %)) (elements (layout/display (:tree (:st f)) 80))))]

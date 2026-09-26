@@ -40,13 +40,13 @@
         <dt>Data</dt>
         <dd>numbers, strings, keywords, <code>nil</code>, <code>true</code> and <code>false</code>, vectors, maps, and quoted lists such as <code>'(1 2 3)</code></dd>
         <dt>Forms</dt>
-        <dd><code>def defn fn let if cond do and or quote</code>, and short functions such as <code>#(* % 2)</code></dd>
+        <dd><code>def defn fn let if cond do and or quote</code>, and short functions such as <code>#(* % 2)</code>. <code>def</code> and <code>defn</code> work at the top level only.</dd>
         <dt>Functions</dt>
         <dd id="subset-fns"></dd>
         <dt>Not yet</dt>
-        <dd>macros, lazy sequences, destructuring, <code>loop</code>/<code>recur</code>, sets, multi-arity functions, atoms and printing</dd>
+        <dd>macros, lazy sequences, destructuring, <code>loop</code>/<code>recur</code>, sets, multi-arity functions, atoms, printing and Java/JavaScript interop</dd>
       </dl>
-      <p>Arguments are evaluated left to right, then the function is applied. <code>map</code>, <code>filter</code> and <code>reduce</code> are eager here, so each call they make shows as a step (Clojure’s own <code>map</code> and <code>filter</code> are lazy). Numbers are JavaScript numbers, as in ClojureScript, so <code>(/ 1 3)</code> is <code>0.333…</code>.</p>
+      <p>Arguments are evaluated left to right, then the function is looked up and applied. <code>map</code>, <code>filter</code> and <code>reduce</code> are eager here, so each call they make shows as a step (Clojure’s own <code>map</code> and <code>filter</code> are lazy). Numbers are JavaScript numbers, as in ClojureScript, so <code>(/ 1 3)</code> is <code>0.333…</code>.</p>
       <p id="caps"></p>
     </details>
   </section>
