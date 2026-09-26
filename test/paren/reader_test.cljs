@@ -48,6 +48,18 @@
   (testing "exactly the cap is fine"
     (is (nil? (:error (r/read-program (str (apply str (repeat 1999 " ")) "1")))))))
 
+(deftest nesting-cap
+  (is (= 3 (r/nesting "(a [b {c 1}])")))
+  (is (= 1 (r/nesting "(str \"((((\" \\( ; ((((\n)")) "strings, char literals and comments don't count")
+  (let [deep (str (apply str (repeat 51 "(")) (apply str (repeat 51 ")")))
+        {:keys [error]} (r/read-program deep)]
+    (is (= :too-deep (:kind error)))
+    (is (= "That expression is nested 51 brackets deep; paren reads up to 50. Try a flatter expression."
+           (:message error))))
+  (testing "49 nested calls are read and run"
+    (let [src (str (apply str (repeat 49 "(inc ")) "1" (apply str (repeat 49 ")")))]
+      (is (= 50 (:result (s/run src)))))))
+
 (deftest syntax-quote-is-named
   (let [{:keys [error]} (r/read-program "`(a b)")]
     (is (= :unsupported (:kind error)))

@@ -137,9 +137,15 @@
   (let [{:keys [trace i]} @app]
     (get-in trace [:frames i])))
 
+(declare error-kind-label)
+
 (defn- render-stage! [frame]
   (let [tree ($ "tree")]
     (clear! tree)
+    (when-let [failure (:failure @app)]
+      (.appendChild tree (h "div" {:class "slip" :role "note"}
+                            (h "p" {:class "slip-kind"} (error-kind-label failure))
+                            (h "p" {:class "slip-msg"} (code-text (:message failure))))))
     (when frame
       (let [display (layout/display (:tree (:st frame)) (stage-width-ch))
             dom (render-el display (:redex frame))]
@@ -163,7 +169,10 @@
                  (:error :depth-cap :step-cap :size-cap) " stopped"
                  nil)))
     (when frame
-      (.appendChild text (h "span" {} (code-text (:caption frame)))))))
+      (.appendChild text (h "span" {} (code-text (:caption frame)))))
+    (when (:failure @app)
+      (set! (.-className cap) "caption stopped")
+      (.appendChild text (h "span" {} "Fix the expression, then press Step through.")))))
 
 (defn- render-controls! []
   (let [{:keys [trace i playing?]} @app
@@ -380,6 +389,7 @@
     :read "Reader error"
     :unsupported "Not in the subset"
     :too-long "Too long"
+    :too-deep "Too deeply nested"
     :empty "Nothing to run"
     "Syntax error"))
 
@@ -399,14 +409,10 @@
          (render!)
          (write-hash!))
        (do
-         (reset! app {:trace nil :src src :i 0 :playing? false})
+         (reset! app {:trace nil :failure t :src src :i 0 :playing? false})
+         (pick-scale!)
          (show-src-error! (:message t))
-         (render!)
-         (.appendChild ($ "tree")
-                       (h "div" {:class "slip" :role "note"}
-                          (h "p" {:class "slip-kind"} (error-kind-label t))
-                          (h "p" {:class "slip-msg"} (code-text (:message t)))))
-         (set! (.-textContent ($ "caption-text")) "Fix the expression, then press Step through."))))
+         (render!))))
    (.setAttribute js/document.documentElement "data-state" "ready")))
 
 (defn- load-src! [src start]
@@ -458,6 +464,7 @@
   (set! (.-textContent ($ "subset-fns")) (str/join " " b/names))
   (set! (.-textContent ($ "caps"))
         (str "Caps: " (reader/format-count reader/max-chars) " characters of input, "
+             reader/max-nesting " levels of brackets, "
              (reader/format-count s/max-steps) " steps, " s/max-depth " nested calls, "
              (reader/format-count s/max-nodes) " boxes on the stage.")))
 

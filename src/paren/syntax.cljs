@@ -18,62 +18,63 @@
   '#{def defn fn fn* let let* if cond do and or quote})
 
 (def ^:private hints
-  {'loop "write it as plain recursion instead"
-   'recur "write it as plain recursion instead"
-   'when "write (if test (do …)) instead"
-   'when-not "write (if test nil (do …)) instead"
-   'if-not "swap the branches of an if instead"
-   'if-let "use let and if instead"
-   'when-let "use let and if instead"
-   'case "use cond instead"
-   'condp "use cond instead"
-   '-> "write the calls nested instead"
-   '->> "write the calls nested instead"
-   'for "use map and filter instead"
-   'doseq "use map or recursion instead"
-   'dotimes "use recursion instead"
-   'while "use recursion instead"
-   'println "paren shows values, not printed output"
-   'prn "paren shows values, not printed output"
-   'print "paren shows values, not printed output"
-   'atom "the subset has no mutable state"
-   'swap! "the subset has no mutable state"
-   'reset! "the subset has no mutable state"
-   'deref "the subset has no mutable state"
-   'set! "the subset has no mutable state"
-   'defmacro "macros are on paren's Next list"
-   'lazy-seq "lazy sequences are on paren's Next list"
-   'iterate "lazy sequences are on paren's Next list"
-   'repeat "lazy sequences are on paren's Next list"
-   'cycle "lazy sequences are on paren's Next list"
-   'letfn "use let with fn instead"
-   'apply "call the function directly instead"
-   'second "use (first (rest xs)) instead"})
+  {"loop" "write it as plain recursion instead"
+   "recur" "write it as plain recursion instead"
+   "when" "write (if test (do …)) instead"
+   "when-not" "write (if test nil (do …)) instead"
+   "if-not" "swap the branches of an if instead"
+   "if-let" "use let and if instead"
+   "when-let" "use let and if instead"
+   "case" "use cond instead"
+   "condp" "use cond instead"
+   "->" "write the calls nested instead"
+   "->>" "write the calls nested instead"
+   "for" "use map and filter instead"
+   "doseq" "use map or recursion instead"
+   "dotimes" "use recursion instead"
+   "while" "use recursion instead"
+   "println" "paren shows values, not printed output"
+   "prn" "paren shows values, not printed output"
+   "print" "paren shows values, not printed output"
+   "atom" "the subset has no mutable state"
+   "swap!" "the subset has no mutable state"
+   "reset!" "the subset has no mutable state"
+   "deref" "the subset has no mutable state"
+   "set!" "the subset has no mutable state"
+   "defmacro" "macros are on paren's Next list"
+   "lazy-seq" "lazy sequences are on paren's Next list"
+   "iterate" "lazy sequences are on paren's Next list"
+   "repeat" "lazy sequences are on paren's Next list"
+   "cycle" "lazy sequences are on paren's Next list"
+   "letfn" "use let with fn instead"
+   "apply" "call the function directly instead"
+   "second" "use (first (rest xs)) instead"})
 
 (def unsupported-names
   "Real Clojure names that paren does not implement. They get a clear
   message instead of a confusing \"unable to resolve\" (unless the program
-  defines the name itself)."
+  defines the name itself). Kept as one string: a set of ~150 symbol
+  literals would cost several KB of bundle."
   (into (set (keys hints))
-        '#{when-some if-some when-first cond-> cond->> as-> some-> some->> doto
-           try catch finally throw new defmulti defmethod defprotocol defrecord
-           deftype definterface reify proxy ns require import use binding
-           lazy-cat delay future var comment declare defonce defn- fn?
-           take drop take-while drop-while take-nth partition partition-by
-           partition-all interleave interpose concat into sort sort-by group-by
-           frequencies comp partial juxt identity constantly some every?
-           not-every? not-any? keep keep-indexed remove mapcat map-indexed mapv
-           filterv reverse last butlast ffirst fnext nnext next nthrest nthnext
-           seq vals keys merge merge-with select-keys update update-in assoc-in
-           get-in dissoc disj contains? find hash-map hash-set sorted-map
-           sorted-set set vec subs printf format re-find re-matches re-seq
-           re-pattern rand rand-int rand-nth shuffle trampoline memoize doall
-           dorun realized? transduce sequence zipmap distinct dedupe flatten
-           reduced reduced? reduce-kv run! every-pred some-fn fnil keyword
-           symbol name namespace int double long char boolean number? string?
-           keyword? symbol? map? vector? list? seq? coll? integer? true? false?
-           some? peek pop subvec compare abs max-key min-key repeatedly
-           pr prn-str pr-str print-str eval quot* time assert}))
+        (str/split (str/trim "when-some if-some when-first cond-> cond->> as-> some-> some->> doto try
+         catch finally throw new defmulti defmethod defprotocol defrecord deftype
+         definterface reify proxy ns require import use binding lazy-cat delay
+         future var comment declare defonce defn- fn? take drop take-while
+         drop-while take-nth partition partition-by partition-all interleave
+         interpose concat into sort sort-by group-by frequencies comp partial
+         juxt identity constantly some every? not-every? not-any? keep
+         keep-indexed remove mapcat map-indexed mapv filterv reverse last butlast
+         ffirst fnext nnext next nthrest nthnext seq vals keys merge merge-with
+         select-keys update update-in assoc-in get-in dissoc disj contains? find
+         hash-map hash-set sorted-map sorted-set set vec subs printf format
+         re-find re-matches re-seq re-pattern rand rand-int rand-nth shuffle
+         trampoline memoize doall dorun realized? transduce sequence zipmap
+         distinct dedupe flatten reduced reduced? reduce-kv run! every-pred
+         some-fn fnil keyword symbol name namespace int double long char boolean
+         number? string? keyword? symbol? map? vector? list? seq? coll? integer?
+         true? false? some? peek pop subvec compare abs max-key min-key
+         repeatedly pr prn-str pr-str print-str eval quot* time assert")
+                   #"\s+")))
 
 (defn fail!
   "Throws a parse error. kind is :unsupported or :syntax."
@@ -83,7 +84,7 @@
 (defn- unsupported-name! [s]
   (fail! :unsupported
          (str "`" s "` isn't in paren's teaching subset"
-              (when-let [h (hints s)] (str " (" h ")"))
+              (when-let [h (hints (str s))] (str " (" h ")"))
               ".")))
 
 (defn- norm
@@ -263,7 +264,7 @@
         (special-forms s)
         (fail! :syntax (str "`" s "` is a special form, so it only works at the start of a list, like (" s " …)."))
         (= s '&) (fail! :syntax "`&` only belongs in a parameter list.")
-        (and (unsupported-names s) (not ((:bound ctx) s))) (unsupported-name! s)
+        (and (unsupported-names (str s)) (not ((:bound ctx) s))) (unsupported-name! s)
         :else {:t :sym :s s}))
 
     (seq? form)

@@ -195,9 +195,10 @@
 ;; Captions
 
 (defn show
-  "A value as it appears in a caption."
+  "A value as it appears in a caption. Captions mark code with backticks,
+  so a backtick inside a printed value is swapped for a look-alike."
   [x]
-  (v/show x 48))
+  (str/replace (v/show x 48) "`" "ˋ"))
 
 (defn- test-desc [x]
   (cond
@@ -205,15 +206,18 @@
     (nil? x) "nil, which is falsy"
     :else (str (show x) ", which is truthy")))
 
+(defn- show-short [x]
+  (str/replace (v/show x 24) "`" "ˋ"))
+
 (defn- args-desc [args]
   (if (empty? args)
     "no arguments"
-    (str/join " " (map #(v/show % 24) args))))
+    (str/join " " (map show-short args))))
 
 (defn- bindings-desc [vars]
   (if (empty? vars)
     "no arguments"
-    (str/join ", " (map (fn [[s x]] (str s " = " (v/show x 24))) vars))))
+    (str/join ", " (map (fn [[s x]] (str s " = " (show-short x))) vars))))
 
 (defn fn-label
   "A short name for a function value: inc, fib, or ‹fn [x]›."
@@ -379,7 +383,7 @@
                  :caption (str "take item " i " of " (show fv) " → " (show (nth fv i)))}))
 
       :else
-      (b/fail (str (show fv) " is " (v/type-name fv) ", not a function, so it can't be called")))))
+      (b/fail (str "Can't call " (show fv) ": it's " (v/type-name fv) ", not a function")))))
 
 (defn- body-contract [n who]
   (let [body (:body n)]

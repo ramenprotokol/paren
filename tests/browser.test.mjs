@@ -94,6 +94,10 @@ test('desktop: step through, scrub, presets, errors, share link', { skip, timeou
     assert.equal(await page.evaluate("document.getElementById('src-error').hidden"), false);
     assert.match(await page.evaluate(text('#src-error')), /^Couldn't read that: .*EOF/);
     assert.match(await page.evaluate(text('#tree .slip')), /Reader error/);
+    await page.evaluate("window.dispatchEvent(new Event('resize')), true");
+    await new Promise((r) => setTimeout(r, 250));
+    assert.match(await page.evaluate(text('#tree .slip')), /Reader error/, 'the message survives a re-render');
+    assert.match(await page.evaluate("document.getElementById('caption').className"), /stopped/);
     assert.equal(await page.evaluate("document.getElementById('fwd').disabled"), true);
 
     await run(page, '(loop [i 0] i)');

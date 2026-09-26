@@ -10,6 +10,33 @@
   "Longest input paren will read. paren is for small, watchable programs."
   2000)
 
+(def max-nesting
+  "Deepest bracket nesting paren will read. Real teaching programs stay far
+  below this; the cap keeps the reader and the stepper's recursion safe."
+  50)
+
+(defn nesting
+  "Deepest bracket nesting in src, skipping strings, comments and character
+  literals such as \\(."
+  [src]
+  (let [n (count src)]
+    (loop [i 0 depth 0 best 0 in-str? false]
+      (if (>= i n)
+        best
+        (let [c (.charAt src i)]
+          (cond
+            in-str? (case c
+                      "\\" (recur (+ i 2) depth best true)
+                      "\"" (recur (inc i) depth best false)
+                      (recur (inc i) depth best true))
+            (= c "\"") (recur (inc i) depth best true)
+            (= c ";") (let [j (.indexOf src "\n" i)]
+                        (recur (if (neg? j) n j) depth best false))
+            (= c "\\") (recur (+ i 2) depth best false)
+            (or (= c "(") (= c "[") (= c "{")) (recur (inc i) (inc depth) (max best (inc depth)) false)
+            (or (= c ")") (= c "]") (= c "}")) (recur (inc i) (max 0 (dec depth)) best false)
+            :else (recur (inc i) depth best false)))))))
+
 (defn format-count
   "12345 -> \"12,345\"."
   [n]
@@ -27,7 +54,7 @@
 (defn read-program
   "Reads every top-level form in `src`.
   Returns {:forms [...]} or {:error {:kind k :message m}}, where k is one of
-  :empty, :too-long, :read or :unsupported."
+  :empty, :too-long, :too-deep, :read or :unsupported."
   [src]
   (let [src (or src "")]
     (cond
@@ -35,6 +62,11 @@
       {:error {:kind :too-long
                :message (str "That is " (format-count (count src)) " characters; paren reads up to "
                              (format-count max-chars) ". Try a smaller expression.")}}
+
+      (> (nesting src) max-nesting)
+      {:error {:kind :too-deep
+               :message (str "That expression is nested " (nesting src) " brackets deep; paren reads up to "
+                             max-nesting ". Try a flatter expression.")}}
 
       (str/blank? src)
       {:error {:kind :empty

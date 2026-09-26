@@ -21,6 +21,8 @@
     "(defmacro m [] 1)" "`defmacro` isn't in paren's teaching subset (macros are on paren's Next list)."
     "(println 1)" "`println` isn't in paren's teaching subset (paren shows values, not printed output)."
     "(take 2 [1 2 3])" "`take` isn't in paren's teaching subset."
+    "(drop-while odd? [1 2])" "`drop-while` isn't in paren's teaching subset."
+    "(re-seq x y)" "`re-seq` isn't in paren's teaching subset."
     "(iterate inc 0)" "`iterate` isn't in paren's teaching subset (lazy sequences are on paren's Next list)."
     "@a" "`deref` isn't in paren's teaching subset (the subset has no mutable state)."
     "#{1 2}" "Sets (#{…}) aren't in paren's teaching subset."
