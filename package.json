@@ -1,0 +1,22 @@
+{
+  "name": "paren",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Watch a Lisp expression evaluate, one substitution at a time.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "shadow-cljs release app && node scripts/postbuild.mjs",
+    "test": "npm run test:cljs && npm run build && npm run test:dist",
+    "test:cljs": "shadow-cljs compile test && node build/test/test.cjs",
+    "test:dist": "node --test tests/*.test.mjs",
+    "serve": "node scripts/serve.mjs",
+    "shots": "node scripts/shots.mjs"
+  },
+  "devDependencies": {
+    "shadow-cljs": "3.5.3"
+  }
+}

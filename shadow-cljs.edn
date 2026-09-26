@@ -1,0 +1,22 @@
+;; shadow-cljs configuration. Needs Java 21+ and Node 22+.
+;; ClojureScript itself (and cljs.tools.reader, which ships with it) is
+;; downloaded from Maven/Clojars by shadow-cljs on the first build.
+{:source-paths ["src" "test"]
+ :dependencies []
+ :builds
+ {:app
+  {:target :browser
+   :output-dir "build/app/js"
+   :asset-path "js"
+   :module-hash-names 8
+   :build-options {:manifest-name "manifest.json"}
+   :modules {:main {:init-fn paren.app/init}}
+   :release {:compiler-options {:optimizations :advanced
+                                :infer-externs :auto
+                                :source-map false}}}
+
+  :test
+  {:target :node-test
+   :output-to "build/test/test.cjs"
+   :ns-regexp "-test$"
+   :autorun false}}}
