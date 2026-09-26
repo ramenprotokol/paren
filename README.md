@@ -68,7 +68,7 @@ npm run build        # shadow-cljs release (:advanced) → dist/
 npm run serve        # optional: serve dist/ on a random free port
 ```
 
-`scripts/postbuild.mjs` assembles `dist/`. It copies the content-hashed bundle, hashes the stylesheet, fills in `index.html`, writes `_headers`, and prints the sizes, measured at build time. From the latest build:
+`scripts/postbuild.mjs` assembles `dist/`. It copies the content-hashed bundle, hashes the stylesheet, fills in `index.html`, writes `_headers` and `THIRD-PARTY-NOTICES.txt` (see [Licence](#license)), and prints the sizes, measured at build time. From the latest build:
 
 | file | raw | gzip |
 |---|---|---|
@@ -103,7 +103,7 @@ If Chrome isn't found, the browser tests are skipped. `REQUIRE_BROWSER=1` makes 
 
 ## Cloudflare (free tier, static only)
 
-`dist/` is five static files. There is no Worker, KV, D1 or server code, and no API calls. That is far inside Cloudflare Pages' free static limits: unlimited requests, 20,000 files per site, 25 MiB per file.
+`dist/` is six static files. There is no Worker, KV, D1 or server code, and no API calls. That is far inside Cloudflare Pages' free static limits: unlimited requests, 20,000 files per site, 25 MiB per file.
 
 It is **deploy-ready, not deployed**. To deploy your own copy:
 
@@ -155,4 +155,6 @@ Built by Ramen Protocol with AI assistance (Claude). Typography: IBM Plex Mono a
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+paren's own code is MIT. See [LICENSE](LICENSE).
+
+The compiled bundle also contains third-party code: ClojureScript (`cljs.core`, `clojure.string`, `clojure.walk`), `cljs.tools.reader` and a few lines of shadow-cljs module runtime, all under the Eclipse Public License 1.0, and parts of the Google Closure Library, under Apache-2.0. `:advanced` compilation strips their source headers, so the build writes `dist/THIRD-PARTY-NOTICES.txt` with each component's version (read from what the build resolved), copyright, licence, source address, the EPL-1.0 object-code terms, and the full EPL-1.0 and Apache-2.0 texts (kept in `licenses/`). The page's footer links to it, and the bundle starts with a short `/*! … */` banner pointing there. The build fails if the bundle ever contains a source file that the notices don't cover.

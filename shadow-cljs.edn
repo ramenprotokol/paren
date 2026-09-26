@@ -10,7 +10,10 @@
    :asset-path "js"
    :module-hash-names 8
    :build-options {:manifest-name "manifest.json"}
-   :modules {:main {:init-fn paren.app/init}}
+   ;; :advanced strips the licence headers of cljs.core and friends; this
+   ;; banner points at the notices scripts/postbuild.mjs writes next to it.
+   :modules {:main {:init-fn paren.app/init
+                    :prepend "/*! paren (MIT). Includes ClojureScript, tools.reader and shadow-cljs (EPL-1.0) and the Google Closure Library (Apache-2.0). Licences, copyright notices and source links: /THIRD-PARTY-NOTICES.txt */\n"}}
    :release {:compiler-options {:optimizations :advanced
                                 :infer-externs :auto
                                 :source-map false}}}

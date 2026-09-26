@@ -28,6 +28,32 @@ test('dist/ holds a complete, hashed static site', () => {
   assert.ok(all.length < 20000, 'well under the Pages file limit');
 });
 
+test('dist/ ships third-party notices for the compiled bundle', () => {
+  assert.ok(existsSync(join(dist, 'THIRD-PARTY-NOTICES.txt')), 'THIRD-PARTY-NOTICES.txt is missing from dist/');
+  const t = read('THIRD-PARTY-NOTICES.txt').toString();
+  const html = read('index.html').toString();
+  const js = /src="(js\/[^"]+)"/.exec(html)[1];
+  assert.ok(t.includes(js), 'names the bundle it describes');
+  // Each component with a version, its copyright line, licence and source.
+  for (const re of [
+    /ClojureScript \d+\.\d+\.\d+/, /Copyright \(c\) Rich Hickey/, /github\.com\/clojure\/clojurescript/,
+    /tools\.reader \d+\.\d+\.\d+/, /Copyright \(c\) Nicola Mometto, Rich Hickey & contributors/, /github\.com\/clojure\/tools\.reader/,
+    /shadow-cljs \d+\.\d+\.\d+/, /Thomas Heller/, /github\.com\/thheller\/shadow-cljs/,
+    /Google Closure Library 0\.0-\d{8}-[0-9a-f]+/, /Copyright The Closure Library Authors/, /github\.com\/google\/closure-library/,
+  ]) assert.match(t, re);
+  // EPL-1.0 section 3 object-code terms, and the full licence texts.
+  assert.match(t, /On behalf of all Contributors, all warranties and conditions/);
+  assert.match(t, /On behalf of all Contributors, all liability for damages is excluded/);
+  assert.match(t, /offered by\s+Ramen Protocol alone and not by any other party/);
+  assert.match(t, /Source code for these components is available/);
+  assert.match(t, /Eclipse Public License - v 1\.0[\s\S]*THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS[\s\S]*State of New York/);
+  assert.match(t, /Apache License\s+Version 2\.0, January 2004[\s\S]*END OF TERMS AND CONDITIONS/);
+  assert.match(t, /MIT License\s+Copyright \(c\) 2026 ramenprotokol/);
+  // The page and the bundle both point at it.
+  assert.match(html, /<a href="THIRD-PARTY-NOTICES\.txt">third-party notices<\/a>/);
+  assert.match(read(js).toString().slice(0, 600), /\/\*! paren \(MIT\)[^*]*EPL-1\.0[^*]*THIRD-PARTY-NOTICES\.txt \*\//);
+});
+
 test('_headers: strict CSP, long cache only on hashed files', () => {
   const h = read('_headers').toString();
   assert.match(h, /Content-Security-Policy: default-src 'self'; script-src 'self';/);
@@ -60,6 +86,9 @@ test('dist/ serves with the production headers', async () => {
     assert.equal(jr.status, 200);
     assert.match(jr.headers.get('content-type'), /javascript/);
     assert.ok((await jr.text()).length > 1000);
+    const nr = await fetch(`${base}/THIRD-PARTY-NOTICES.txt`);
+    assert.equal(nr.status, 200);
+    assert.match(nr.headers.get('content-type'), /text\/plain/);
   } finally {
     server.close();
   }

@@ -675,6 +675,7 @@ button, input, textarea, select {
   color: var(--ink-2);
 }
 .colophon p { margin: 4px 0; max-width: 90ch; }
+.colophon a { color: var(--ink); text-underline-offset: 3px; }
 kbd {
   display: inline-block;
   padding: 0 5px;
