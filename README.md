@@ -109,7 +109,7 @@ If Chrome isn't found, the browser tests are skipped. `REQUIRE_BROWSER=1` makes 
 
 `dist/` is six static files. There is no Worker, KV, D1 or server code, and no API calls. That is far inside Cloudflare Pages' free static limits: unlimited requests, 20,000 files per site, 25 MiB per file.
 
-It is **deploy-ready, not deployed**. To deploy your own copy:
+It is live at <https://paren-23l.pages.dev>. To deploy your own copy:
 
 ```sh
 npm run build
