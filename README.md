@@ -76,10 +76,10 @@ npm run serve        # optional: serve dist/ on a random free port
 | file | raw | gzip |
 |---|---|---|
 | `js/main.<hash>.js` (everything: reader, evaluator, UI, cljs.core) | 289.4 KiB | 70.1 KiB |
-| `css/styles.<hash>.css` | 19.2 KiB | 5.5 KiB |
+| `css/styles.<hash>.css` | 19.5 KiB | 5.5 KiB |
 | `index.html` | 5.9 KiB | 2.2 KiB |
 
-About 65% of the bundle (by optimised size) is `cljs.core` itself; the whole first load of our own files is 77.7 KiB gzipped. Google Fonts (IBM Plex Mono and Instrument Serif) load separately.
+About 65% of the bundle (by optimised size) is `cljs.core` itself; the whole first load of our own files is 77.8 KiB gzipped. Google Fonts (IBM Plex Mono and Instrument Serif) load separately.
 
 ## Test
 
@@ -101,7 +101,7 @@ This runs three things:
 2. **The build.**
 3. **Node tests** (`tests/`):
    - a `dist/` smoke test: hashed files, the third-party notices, `_headers`, a 100 KiB gzip budget, and serving with the production headers;
-   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib`, WCAG AA contrast in light and dark (including text on the vermilion redex, as a chip and as a washed card), and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
+   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib` and with very long names, strings and error messages, WCAG AA contrast in light and dark (including text on the vermilion redex, as a chip and as a washed card), and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
 
 If Chrome isn't found, the browser tests are skipped. `REQUIRE_BROWSER=1` makes that a failure, and `CHROME_PATH` points at a specific browser.
 

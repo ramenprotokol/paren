@@ -179,9 +179,32 @@ test('phone width (400 px, emulated): no horizontal page scroll at any fib step'
     await page.waitFor(ready);
     assert.equal(await page.evaluate('window.innerWidth'), 400);
     for (let i = 0; i <= 71; i++) {
-      const over = await page.evaluate('document.documentElement.scrollWidth - window.innerWidth');
+      const over = await page.evaluate('document.documentElement.scrollWidth - 400');
       assert.ok(over <= 0, `step ${i}: page is ${over}px wider than the screen`);
       await page.key('ArrowRight');
+    }
+    assert.deepEqual(appProblems(page.problems), []);
+    await page.close();
+  });
+});
+
+test('phone width: a long unbroken name, string or error never widens the page', { skip, timeout: 120000 }, async () => {
+  await withSite(async (url, chrome) => {
+    const page = await chrome.openPage({ width: 400, height: 860, mobile: true, scale: 2 });
+    await page.navigate(url);
+    await page.waitFor(ready);
+    const long = 'a'.repeat(90);
+    for (const src of [`(str "https://example.com/a/rather/long/path/with/no/spaces/at/all")`,
+                       `(let [${long} 1] (+ ${long} 1))`, `(defn ${long} [x] x) (${long} 1)`,
+                       `(${long} 1)`, `(+ 1 "${long}")`]) {
+      await run(page, src);
+      for (let i = 0; i < 6; i++) {
+        // Against the 400 px screen, not innerWidth: a mobile browser widens
+        // the layout viewport to fit content that overflows.
+        const over = await page.evaluate('document.documentElement.scrollWidth - 400');
+        assert.ok(over <= 0, `${src.slice(0, 30)}… step ${i}: page is ${over}px wider than the screen`);
+        await page.key('ArrowRight');
+      }
     }
     assert.deepEqual(appProblems(page.problems), []);
     await page.close();

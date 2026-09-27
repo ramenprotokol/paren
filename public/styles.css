@@ -276,6 +276,7 @@ button, input, textarea, select {
   border-left: 3px solid var(--ink);
   background: var(--sheet);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .subset {
@@ -504,7 +505,7 @@ button, input, textarea, select {
   text-transform: uppercase;
   color: var(--ink-2);
 }
-.slip-msg { margin: 0; }
+.slip-msg { margin: 0; overflow-wrap: anywhere; }
 
 /* ---------------------------------------------------------------- tray */
 
@@ -527,6 +528,8 @@ button, input, textarea, select {
   font-size: 16px;
   font-weight: 500;
   min-height: 1.6em;
+  /* A long name or string has no spaces to break at; never widen the page. */
+  overflow-wrap: anywhere;
 }
 .caption .marker {
   flex: none;
@@ -682,7 +685,7 @@ button, input, textarea, select {
   padding-bottom: 3px;
   border-bottom: 2px solid var(--head-rule);
 }
-.icard-label { font-weight: 600; }
+.icard-label { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .icard-kind {
   font-family: var(--font-serif);
   font-style: italic;
@@ -699,7 +702,13 @@ button, input, textarea, select {
   border-bottom: 1px solid var(--rule);
   line-height: 1.95;
 }
-.icard dt { font-weight: 500; }
+.icard dt {
+  font-weight: 500;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .icard dd {
   margin: 0;
   overflow: hidden;
