@@ -2,6 +2,8 @@
 
 **Watch a Lisp expression evaluate, one substitution at a time.**
 
+**Live:** https://paren-23l.pages.dev
+
 paren is a stepper for a small teaching subset of Clojure. Paste an expression (or pick one of five examples) and step through its evaluation. Each sub-expression is a paper card, stacked on the one that contains it; deeper cards are darker and sit higher, with longer shadows. The part about to reduce (the *redex*) is washed in vermilion, with a folded corner, or becomes a vermilion chip when it is a single name. When you step, it folds shut into its value. The environment sits beside the stage as a stack of index cards, and every step has a one-line caption such as ``look up `n` → 3``.
 
 ![paren stepping through a recursive fib, four calls deep, with the environment beside the stage](docs/screenshot.png)
