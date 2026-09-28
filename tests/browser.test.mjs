@@ -1,6 +1,7 @@
 // End-to-end check in real headless Chrome against dist/, served with the
 // production Content-Security-Policy. It drives the page like a learner
-// would and fails on any console error, uncaught exception or CSP report.
+// would and fails on any console error, uncaught exception or CSP report,
+// and on any request that leaves the page's origin.
 // Skips if Chrome is missing (set CHROME_PATH), unless REQUIRE_BROWSER=1.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,8 +17,6 @@ if (!chromePath && process.env.REQUIRE_BROWSER === '1') {
   test('a browser is available', () => assert.fail('REQUIRE_BROWSER=1 but Chrome was not found'));
 }
 
-// Web fonts come from a third party; being offline is not an app error.
-const appProblems = (list) => list.filter((p) => !/fonts\.(googleapis|gstatic)\.com/.test(`${p.text} ${p.url ?? ''}`));
 const text = (sel) => `document.querySelector(${JSON.stringify(sel)}).textContent`;
 const ready = "document.documentElement.dataset.state === 'ready'";
 
@@ -42,6 +41,20 @@ test('desktop: step through, scrub, presets, errors, share link', { skip, timeou
     const page = await chrome.openPage({ width: 1280, height: 800 });
     await page.navigate(url);
     await page.waitFor(ready);
+
+    // The fonts come from this site: each of the six faces loads, and no
+    // request (the fonts included) leaves the page's origin.
+    const faces = ['400 16px "IBM Plex Mono"', '500 16px "IBM Plex Mono"', '600 16px "IBM Plex Mono"',
+                   'italic 400 16px "IBM Plex Mono"', '400 16px "Instrument Serif"', 'italic 400 16px "Instrument Serif"'];
+    assert.equal(await page.evaluate('document.fonts.size'), faces.length, 'one @font-face per self-hosted file');
+    const loaded = await page.evaluate(`Promise.all(${JSON.stringify(faces)}.map((f) => document.fonts.load(f).then((l) => l.length)))`);
+    assert.deepEqual(loaded, faces.map(() => 1), 'each face resolves to one loaded file');
+    for (const f of faces) assert.equal(await page.evaluate(`document.fonts.check(${JSON.stringify(f)})`), true, f);
+    assert.equal(await page.evaluate("[...document.fonts].filter((f) => f.status === 'loaded').length"), faces.length);
+    const offsite = await page.evaluate("performance.getEntriesByType('resource').map((e) => e.name).filter((u) => !u.startsWith(location.origin + '/'))");
+    assert.deepEqual(offsite, [], 'every request stays on this origin');
+    const fontFiles = await page.evaluate("performance.getEntriesByType('resource').map((e) => new URL(e.name).pathname).filter((p) => /^\\/fonts\\/[\\w-]+\\.[0-9a-f]{8}\\.woff2$/.test(p))");
+    assert.equal(new Set(fontFiles).size, faces.length, `fonts fetched from /fonts/: ${fontFiles.join(', ')}`);
 
     // First view: the fib preset at step 0, one redex highlighted.
     assert.equal(await page.evaluate(text('#counter')), 'step 0 of 71');
@@ -117,7 +130,7 @@ test('desktop: step through, scrub, presets, errors, share link', { skip, timeou
     await page.key('End');
     assert.match(await page.evaluate(text('#caption-text')), /recursion cap/);
 
-    assert.deepEqual(appProblems(page.problems), []);
+    assert.deepEqual(page.problems, []);
     await page.close();
 
     // A shared link opens the same expression at the same step.
@@ -127,7 +140,7 @@ test('desktop: step through, scrub, presets, errors, share link', { skip, timeou
     await shared.waitFor(ready);
     assert.equal(await shared.evaluate("document.getElementById('src').value"), src);
     assert.match(await shared.evaluate(text('#counter')), /^step 3 of \d+$/);
-    assert.deepEqual(appProblems(shared.problems), []);
+    assert.deepEqual(shared.problems, []);
     await shared.close();
   });
 });
@@ -162,7 +175,7 @@ test('hostile or malformed share links settle fast with a clear message', { skip
       // s=99999 is clamped to the last step: the one that stopped.
       assert.match(await page.evaluate(text('#caption-text')), message, src);
       assert.match(await page.evaluate("document.getElementById('caption').className"), /stopped/, src);
-      assert.deepEqual(appProblems(page.problems), [], src);
+      assert.deepEqual(page.problems, [], src);
       await page.close();
     }
 
@@ -173,7 +186,7 @@ test('hostile or malformed share links settle fast with a clear message', { skip
       await page.waitFor(ready);
       assert.equal(await page.evaluate(text('#counter')), `step ${shown} of 2`, `s=${s}`);
       assert.equal(await page.evaluate("document.getElementById('scrub').value"), String(shown), `s=${s}`);
-      assert.deepEqual(appProblems(page.problems), []);
+      assert.deepEqual(page.problems, []);
       await page.close();
     }
   });
@@ -190,7 +203,7 @@ test('phone width (400 px, emulated): no horizontal page scroll at any fib step'
       assert.ok(over <= 0, `step ${i}: page is ${over}px wider than the screen`);
       await page.key('ArrowRight');
     }
-    assert.deepEqual(appProblems(page.problems), []);
+    assert.deepEqual(page.problems, []);
     await page.close();
   });
 });
@@ -213,7 +226,7 @@ test('phone width: a long unbroken name, string or error never widens the page',
         await page.key('ArrowRight');
       }
     }
-    assert.deepEqual(appProblems(page.problems), []);
+    assert.deepEqual(page.problems, []);
     await page.close();
   });
 });
@@ -269,7 +282,7 @@ for (const scheme of ['light', 'dark']) {
       assert.ok(Object.keys(ratios).length >= 14, 'most elements were found');
       assert.equal(Object.keys(card).length, 2, 'the washed redex card was measured');
       for (const [sel, r] of Object.entries(ratios)) assert.ok(r >= 4.5, `${sel}: ${r.toFixed(2)}:1`);
-      assert.deepEqual(appProblems(page.problems), []);
+      assert.deepEqual(page.problems, []);
       await page.close();
     });
   });

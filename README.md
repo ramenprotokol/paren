@@ -73,15 +73,16 @@ npm run build        # shadow-cljs release (:advanced) → dist/
 npm run serve        # optional: serve dist/ on a random free port
 ```
 
-`scripts/postbuild.mjs` assembles `dist/`. It copies the content-hashed bundle, hashes the stylesheet, fills in `index.html`, writes `_headers` and `THIRD-PARTY-NOTICES.txt` (see [Licence](#license)), and prints the sizes, measured at build time. From the latest build:
+`scripts/postbuild.mjs` assembles `dist/`. It copies the content-hashed bundle, hashes the font files and points the stylesheet at them, hashes the stylesheet, fills in `index.html`, writes `_headers` and `THIRD-PARTY-NOTICES.txt` (see [Licence](#license)), and prints the sizes, measured at build time. From the latest build:
 
 | file | raw | gzip |
 |---|---|---|
-| `js/main.<hash>.js` (everything: reader, evaluator, UI, cljs.core) | 289.4 KiB | 70.1 KiB |
-| `css/styles.<hash>.css` | 19.5 KiB | 5.5 KiB |
-| `index.html` | 5.9 KiB | 2.2 KiB |
+| `js/main.<hash>.js` (everything: reader, evaluator, UI, cljs.core) | 289.9 KiB | 70.4 KiB |
+| `css/styles.<hash>.css` | 22.2 KiB | 6.1 KiB |
+| `index.html` | 5.7 KiB | 2.0 KiB |
+| `fonts/*.<hash>.woff2` (six files, fetched as the page uses them) | 101.1 KiB | (already compressed) |
 
-About 65% of the bundle (by optimised size) is `cljs.core` itself; the whole first load of our own files is 77.8 KiB gzipped. Google Fonts (IBM Plex Mono and Instrument Serif) load separately.
+About 65% of the bundle (by optimised size) is `cljs.core` itself; the code, styles and page together are 78.5 KiB gzipped. The fonts, IBM Plex Mono and Instrument Serif, are served from the site itself (see [Privacy](#privacy)).
 
 ## Test
 
@@ -103,14 +104,14 @@ This runs three things:
    - 71 odd or hostile inputs, each of which must end in a clear status within 3 seconds and never an internal error.
 2. **The build.**
 3. **Node tests** (`tests/`):
-   - a `dist/` smoke test: hashed files, the third-party notices, `_headers`, a 100 KiB gzip budget, and serving with the production headers;
-   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib` and with very long names, strings and error messages, WCAG AA contrast in light and dark (including text on the vermilion redex, as a chip and as a washed card), and instant steps under `prefers-reduced-motion`. It fails on any console error or exception.
+   - a `dist/` smoke test: hashed files, the self-hosted fonts (no Google Fonts reference in the page, stylesheet or headers; six hashed WOFF2 files, each used by the stylesheet), the third-party notices, `_headers`, a 100 KiB gzip budget, and serving with the production headers;
+   - a **headless Chrome** check over the DevTools protocol, run against `dist/` with the production Content-Security-Policy. It steps, scrubs, plays, opens shared links and feeds in bad input. It opens hostile share links, which must settle within 5 seconds with their message, and links with a malformed step such as `s=abc`, which must open at a real step. It checks for no horizontal scroll at a true 400 px width (device emulation) on every step of `fib` and with very long names, strings and error messages, WCAG AA contrast in light and dark (including text on the vermilion redex, as a chip and as a washed card), and instant steps under `prefers-reduced-motion`. It checks that each of the six font faces loads and that no request leaves the page's origin, and it fails on any console error, exception or CSP violation.
 
 If Chrome isn't found, the browser tests are skipped. `REQUIRE_BROWSER=1` makes that a failure, and `CHROME_PATH` points at a specific browser.
 
 ## Cloudflare (free tier, static only)
 
-`dist/` is six static files. There is no Worker, KV, D1 or server code, and no API calls. That is far inside Cloudflare Pages' free static limits: unlimited requests, 20,000 files per site, 25 MiB per file.
+`dist/` is twelve static files (six of them fonts). There is no Worker, KV, D1 or server code, and no API calls. That is far inside Cloudflare Pages' free static limits: unlimited requests, 20,000 files per site, 25 MiB per file.
 
 It is live at <https://paren-23l.pages.dev>. To deploy your own copy:
 
@@ -123,15 +124,15 @@ There is deliberately no `npm run deploy` script and no `account_id` in `wrangle
 
 `dist/_headers` sets:
 
-- a strict Content-Security-Policy: `script-src 'self'`, and no inline scripts or styles;
+- a strict Content-Security-Policy: `script-src 'self'`, `style-src 'self'` and `font-src 'self'`, and no inline scripts or styles;
 - `nosniff`, `no-referrer`, and a locked-down Permissions-Policy;
-- a one-year immutable cache **only** on `/js/*` and `/css/*`, whose file names carry a content hash. `index.html` is `no-cache`.
+- a one-year immutable cache **only** on `/js/*`, `/css/*` and `/fonts/*`, whose file names carry a content hash. `index.html` is `no-cache`.
 
 ## Privacy
 
 - Everything runs in the browser. There are no analytics, no cookies and no storage.
 - The expression lives in the URL fragment (`#e=…&s=…`), which browsers do not send to the server.
-- The only third-party request is Google Fonts. If it fails, the page falls back to system fonts.
+- The page makes no third-party requests. The fonts are served from the site itself, not from a font service, and the Content-Security-Policy allows scripts, styles and fonts from the site only.
 
 ## Honest limitations
 
@@ -158,10 +159,12 @@ There is deliberately no `npm run deploy` script and no `account_id` in `wrangle
 
 ## Credits
 
-Built by Ramen Protocol with AI assistance (Claude). Typography: IBM Plex Mono and Instrument Serif (Google Fonts).
+Built by Ramen Protocol with AI assistance (Claude). Typography: IBM Plex Mono and Instrument Serif, both under the SIL Open Font License 1.1 and served from this site (their notices are in `THIRD-PARTY-NOTICES.txt`).
 
 ## License
 
 paren's own code is MIT. See [LICENSE](LICENSE).
 
 The compiled bundle also contains third-party code: ClojureScript (`cljs.core`, `clojure.string`, `clojure.walk`), `cljs.tools.reader` and a few lines of shadow-cljs module runtime, all under the Eclipse Public License 1.0, and parts of the Google Closure Library, under Apache-2.0. `:advanced` compilation strips their source headers, so the build writes `dist/THIRD-PARTY-NOTICES.txt` with each component's version (read from what the build resolved), copyright, licence, source address, the EPL-1.0 object-code terms, and the full EPL-1.0 and Apache-2.0 texts (kept in `licenses/`). The page's footer links to it, and the bundle starts with a short `/*! … */` banner pointing there. The build fails if the bundle ever contains a source file that the notices don't cover.
+
+The site also ships its two typefaces, both under the SIL Open Font License 1.1: IBM Plex Mono (IBM's own Latin1 WOFF2 subsets from `@ibm/plex-mono` 2.5.0, unmodified, because "Plex" is a Reserved Font Name) and Instrument Serif (the Latin subset Google Fonts serves). The files are in `public/fonts/`, their licence files in `licenses/`, and `THIRD-PARTY-NOTICES.txt` lists each file with its copyright line and the OFL text. The build fails if `public/fonts/` holds a file the notices don't list.
