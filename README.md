@@ -46,7 +46,7 @@ Semantics follow ClojureScript: numbers are JavaScript numbers, so `(/ 1 3)` is 
 
 ### Caps, each with its own message
 
-- 2,000 characters of input, nested at most 50 brackets deep.
+- 2,000 characters of input, nested at most 50 brackets deep, and at most 100 levels once quote marks such as `'` and `~` are counted (`'x` reads as `(quote x)`, a level with no bracket).
 - 5,000 steps. The steps up to the cap stay scrubbable.
 - 100 function calls in progress at once (the recursion cap).
 - 2,500 boxes on the stage, nested at most 400 boxes deep. Drawing the stage walks the tree recursively, and a recursive call sitting inside many pending calls deepens it fast; far past this the browser runs out of stack.

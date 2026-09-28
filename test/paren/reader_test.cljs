@@ -60,6 +60,22 @@
     (let [src (str (apply str (repeat 49 "(inc ")) "1" (apply str (repeat 49 ")")))]
       (is (= 50 (:result (s/run src)))))))
 
+(deftest quote-marks-count-toward-nesting
+  (testing "found in review: `~x` reads as (unquote x) with no bracket, so 800 of them passed the
+            bracket cap and overflowed the stack while parsing; a share link to it opened on a blank page"
+    (doseq [n [101 800 1200 1999]]
+      (let [t (s/run (str (apply str (repeat n "~")) "x"))]
+        (is (= :error (:status t)) n)
+        (is (= :too-deep (:kind t)) n))))
+  (testing "the message gives the depth and the cap"
+    (is (= (str "That expression is nested 101 levels deep once quote marks such as ' and ~ are counted; "
+                "paren reads up to 100. Try a flatter expression.")
+           (get-in (r/read-program (str (apply str (repeat 101 "'")) "x")) [:error :message]))))
+  (testing "100 levels are still read, and brackets count as before"
+    (is (nil? (:error (r/read-program (str (apply str (repeat 100 "'")) "x")))))
+    (is (= 100 (r/read-depth (:forms (r/read-program (str (apply str (repeat 100 "'")) "x"))))))
+    (is (= 3 (r/read-depth (:forms (r/read-program "(a [b {c 1}])")))))))
+
 (deftest syntax-quote-is-named
   (doseq [src ["`(a b)" "`(1 2)" "(+ 1 `x)" "`[1]"]]
     (let [{:keys [error]} (r/read-program src)]

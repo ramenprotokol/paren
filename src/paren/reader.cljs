@@ -15,6 +15,24 @@
   below this; the cap keeps the reader and the stepper's recursion safe."
   50)
 
+(def max-read-depth
+  "Deepest the read forms may nest, counting every list, vector and map.
+  Quote marks nest a form without a bracket ('x reads as (quote x), ~x as
+  (unquote x)), so the bracket cap alone doesn't bound this, and parsing
+  recurses once per level."
+  (* 2 max-nesting))
+
+(defn read-depth
+  "Deepest nesting of collections in the read forms. Walks with its own
+  stack, so a deep form can't overflow the call stack."
+  [forms]
+  (let [colls (fn [d] (comp (filter coll?) (map (fn [x] [x d]))))]
+    (loop [todo (into [] (colls 1) forms) best 0]
+      (if-let [[x d] (peek todo)]
+        (recur (into (pop todo) (colls (inc d)) (if (map? x) (mapcat identity x) x))
+               (max best d))
+        best))))
+
 (defn scan
   "One pass over src, skipping strings, comments and character literals
   such as \\( and \\`. Returns {:depth d :backtick? b}: the deepest bracket
@@ -104,13 +122,29 @@
               (let [form (r/read {:eof ::eof} rdr)]
                 (if (= form ::eof)
                   (if (seq forms)
-                    {:forms forms}
+                    (let [d (read-depth forms)]
+                      (if (> d max-read-depth)
+                        {:error {:kind :too-deep
+                                 :message (str "That expression is nested " d " levels deep once quote marks such as ' and ~ "
+                                               "are counted; paren reads up to " max-read-depth ". Try a flatter expression.")}}
+                        {:forms forms}))
                     {:error {:kind :empty
                              :message "Nothing to evaluate: the input holds only comments or whitespace."}})
                   (recur (conj forms form))))))
           (catch :default e
             (let [d (ex-data e)]
-              (if (:paren/unsupported d)
+              (cond
+                (:paren/unsupported d)
                 {:error {:kind :unsupported :message (ex-message e)}}
+
+                ;; The reader recurses once per quote mark too; far past the
+                ;; cap above it runs out of stack before read-depth can look.
+                ;; (It wraps the RangeError in its own reader error.)
+                (some #(instance? js/RangeError %) (take-while some? (iterate ex-cause e)))
+                {:error {:kind :too-deep
+                         :message (str "That expression is nested too deeply to read; paren reads up to "
+                                       max-read-depth " levels. Try a flatter expression.")}}
+
+                :else
                 {:error {:kind :read
                          :message (str "Couldn't read that: " (tidy (ex-message e)) (where d) ".")}}))))))))

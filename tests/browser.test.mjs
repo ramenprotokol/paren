@@ -179,6 +179,17 @@ test('hostile or malformed share links settle fast with a clear message', { skip
       await page.close();
     }
 
+    // Quote marks nest a form without a bracket: 800 `~`s overflowed the stack while parsing
+    // (blank page); ~1,600 or more overflowed the reader itself.
+    for (const src of ['~'.repeat(1000) + 'x', '~'.repeat(1999) + 'x']) {
+      const page = await chrome.openPage({ width: 1280, height: 800 });
+      await page.navigate(`${url}#e=${encodeURIComponent(src)}`);
+      await withinMs(5000, page.waitFor(ready, 5000), `loading a link to ${src.length} quote marks`);
+      assert.match(await page.evaluate(text('#src-error')), /^That expression is nested (\d+ levels|too deeply)/);
+      assert.deepEqual(page.problems, []);
+      await page.close();
+    }
+
     const src = encodeURIComponent('(+ 1 (* 2 3))'); // 2 steps
     for (const [s, shown] of [['abc', 0], ['', 0], ['-4', 0], ['2.9', 2], ['1e3', 1], ['99999', 2]]) {
       const page = await chrome.openPage({ width: 1280, height: 800 });
