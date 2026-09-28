@@ -49,7 +49,7 @@ Semantics follow ClojureScript: numbers are JavaScript numbers, so `(/ 1 3)` is 
 - 2,000 characters of input, nested at most 50 brackets deep.
 - 5,000 steps. The steps up to the cap stay scrubbable.
 - 100 function calls in progress at once (the recursion cap).
-- 2,500 boxes on the stage.
+- 2,500 boxes on the stage, nested at most 400 boxes deep. Drawing the stage walks the tree recursively, and a recursive call sitting inside many pending calls deepens it fast; far past this the browser runs out of stack.
 - 10,000 items in any one value, counting everything nested inside it. Doubling a vector 40 times shares structure, so it costs almost no memory, but comparing two such values would walk 2^40 items. The cap stops the program at the step that would build the value.
 - `str` results up to 10,000 characters, and `range` up to 1,000 numbers. `range` only takes finite numbers.
 
@@ -91,10 +91,11 @@ npm test
 
 This runs three things:
 
-1. **ClojureScript tests** (`shadow-cljs` `:node-test`, `test/paren/`), 55 tests with 819 assertions:
+1. **ClojureScript tests** (`shadow-cljs` `:node-test`, `test/paren/`), 57 tests with 831 assertions:
    - the stepper on each supported form, with its exact captions and values, including lookup steps for shadowed built-ins and `Duplicate key` for computed map keys;
    - **golden caption sequences** for all five examples, every step in order, plus their final values;
-   - the step cap, the recursion cap, the size cap, the value cap (the doubling program above must stop in under 2 seconds), and the `str`/`range` caps, including `NaN` and a step too small to move;
+   - the step cap, the recursion cap, the size cap, the nesting cap (the deepest step must still lay out), the value cap (the doubling program above must stop in under 2 seconds), and the `str`/`range` caps, including `NaN` and a step too small to move;
+   - speed: a 2,000-character program with 300 built-in names inside a 250-name `let` must reach the step cap within 3 seconds;
    - `range` matching ClojureScript's own, number for number;
    - an exact message for each unsupported form (including interop and a nested `def`) and each malformed special form;
    - the reader error path (unbalanced input, EOF, oversized, over-nested and empty input, syntax-quote), with the position given once;

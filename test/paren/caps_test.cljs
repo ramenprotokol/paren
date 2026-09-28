@@ -3,6 +3,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as str]
             [paren.builtins :as b]
+            [paren.layout :as layout]
             [paren.stepper :as s]))
 
 (defn- timed-run
@@ -115,3 +116,46 @@
     (is (= 7 (b/value-size [[1 2] [3 4]])))
     (is (= 1 (b/value-size 5)))
     (is (= 4 (b/value-size {:a 1})) "a map counts itself, each entry, and the entry's key and value")))
+
+(defn- tree-depth
+  "Boxes on the longest line from the root of a tree down to a leaf."
+  [n]
+  (inc (reduce max 0 (map tree-depth (s/children n)))))
+
+(def deep-body
+  "Found in review: each call nests its recursive call twenty `inc`s deep,
+  so the expression grows about twenty-two boxes deeper per call, long
+  before the recursion cap. Laying out a tree well over a thousand boxes
+  deep overflowed the stack, so a link to this opened on a blank stage."
+  (str "(defn f [n] (if (= n 0) 0 " (str/join (repeat 20 "(inc ")) "(f (dec n))"
+       (str/join (repeat 20 ")")) ")) (f 99)"))
+
+(deftest nesting-cap
+  (testing "the expression may be nested at most 400 boxes deep"
+    (let [t (timed-run deep-body)
+          deepest (apply max-key #(tree-depth (:tree (:st %))) (:frames t))]
+      (is (= :size-cap (:status t)))
+      (is (= (str "Stopped at the nesting cap: this step would nest the expression more than 400 boxes deep, "
+                  "which is more than paren can draw.")
+             (:message t)))
+      (is (<= (tree-depth (:tree (:st deepest))) s/max-nesting))
+      (is (some? (:redex (peek (:frames t)))) "the step that would go too deep is highlighted")
+      (is (< (:ms t) 3000))
+      (testing "and the deepest step it reaches can still be drawn"
+        (is (map? (layout/display (:tree (:st deepest)) 60)))
+        (is (number? (layout/widest-form (:tree (:st deepest))))))))
+  (testing "deep recursion with a plain body still finishes"
+    (is (= 90 (:result (s/run "(defn count-up [n] (if (= n 0) 0 (inc (count-up (dec n))))) (count-up 90)"))))
+    (is (= 99 (:result (s/run (str "(defn f [n] (if (= n 0) 0 (let [m (dec n)] (inc (f m))))) (f 99)")))))))
+
+(deftest built-in-names-in-a-big-frame-stay-fast
+  (testing "found in review: every step rechecked each built-in name against every local, so a
+            2,000-character link with 300 `+`s inside a 250-name let took seconds to open"
+    (let [names (take 250 (for [a "abcdefghijklmnopqrstuvwxyz" b "abcdefghijklmnopqrstuvwxyz"] (str a b)))
+          src (str "(let [" (str/join " " (map #(str % " 1") names)) "] ["
+                   (str/join (repeat 300 "+ "))
+                   "(reduce + (range 1000)) (reduce + (range 1000)) (reduce + (range 600))])")
+          t (timed-run src)]
+      (is (<= (count src) 2000))
+      (is (= :step-cap (:status t)))
+      (is (< (:ms t) 3000) (str "took " (:ms t) " ms")))))

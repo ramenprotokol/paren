@@ -147,6 +147,13 @@ test('hostile or malformed share links settle fast with a clear message', { skip
       ['(defn g [v n] (if (= n 0) v (g [v v] (dec n)))) (= (g [] 40) (g [] 40))',
         /^This vector would hold more than 10,000 items/],
       ['{(+ 1 1) 1 2 3}', /^Duplicate key: 2$/],
+      // A recursive call nested twenty calls deep: drawing it overflowed the stack (blank stage).
+      [`(defn f [n] (if (= n 0) 0 ${'(inc '.repeat(20)}(f (dec n))${')'.repeat(20)})) (f 99)`,
+        /^Stopped at the nesting cap: this step would nest the expression more than 400 boxes deep/],
+      // 300 built-in names inside a 250-name let: every step rechecked each name against every local.
+      [`(let [${[...'abcdefghijk'].flatMap((a) => [...'abcdefghijklmnopqrstuvwxyz'].map((b) => a + b)).slice(0, 250)
+        .map((n) => `${n} 1`).join(' ')}] [${'+ '.repeat(300)}(reduce + (range 1000)) (reduce + (range 1000)) (reduce + (range 600))])`,
+        /^Stopped at the step cap: 5,000 steps ran without finishing/],
     ];
     for (const [src, message] of hostile) {
       const page = await chrome.openPage({ width: 1280, height: 800 });

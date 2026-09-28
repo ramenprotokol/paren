@@ -27,6 +27,13 @@
   "Largest the expression tree may grow, counted in boxes."
   2500)
 
+(def max-nesting
+  "Deepest the expression tree may grow, counted in boxes nested inside one
+  another. Drawing the stage walks the tree recursively, so a much deeper
+  tree (a recursive call nested inside many pending calls grows it fast)
+  would overflow the browser's stack."
+  400)
+
 (defn val-node [x] {:t :val :v x})
 
 (defn- call-node [f args]
@@ -87,8 +94,26 @@
       (when-let [bv (b/lookup s)]
         {:v bv :where :builtin})))
 
+(defonce ^:private local-names (js/WeakMap.))
+
+(defn- local-name?
+  "Is s bound in env's local frames? Remembered per env: an env is an
+  immutable value shared by every node under one let or call, so a step
+  checks each built-in name there once, instead of once per occurrence
+  against every local."
+  [env s]
+  (when env
+    (let [seen (or (.get local-names env)
+                   (let [m (js/Map.)] (.set local-names env m) m))
+          k (str s)]
+      (if (.has seen k)
+        (.get seen k)
+        (let [found? (some? (lookup-local env s))]
+          (.set seen k found?)
+          found?)))))
+
 (defn- builtin-sym? [st env s]
-  (and (nil? (lookup-local env s))
+  (and (not (local-name? env s))
        (not (contains? (:globals st) s))
        (some? (b/lookup s))))
 
@@ -588,6 +613,23 @@
   (str "Stopped at the size cap: the expression grew past " (reader/format-count max-nodes)
        " boxes, which is more than paren can show step by step."))
 
+(defn nesting-message []
+  (str "Stopped at the nesting cap: this step would nest the expression more than " max-nesting
+       " boxes deep, which is more than paren can draw."))
+
+(defn- depth
+  "Boxes on the longest line from node n down to a leaf, n included."
+  [n]
+  (inc (reduce max 0 (map depth (children n)))))
+
+(defn- depth-above
+  "Boxes strictly above `path` in `tree`, the root included."
+  [tree path]
+  (loop [x tree ks (seq path) d 0]
+    (if ks
+      (recur (get x (first ks)) (next ks) (if (:t x) (inc d) d))
+      d)))
+
 (defn step
   "One small step from state st.
   Returns nil when evaluation is finished; otherwise the redex r
@@ -606,8 +648,17 @@
                      (update-in (:tree st1) (pop path) remove-at (peek path))
                      (assoc-in (:tree st1) path (:node out)))
               new-size (+ (:size st) (- (if removed? 0 (size (:node out))) (size n)))]
-          (if (> new-size max-nodes)
+          (cond
+            (> new-size max-nodes)
             {:redex r :error (size-message) :cap :size}
+
+            ;; Only the replaced subtree changes, and every tree starts
+            ;; shallow (the reader caps bracket nesting), so checking here
+            ;; bounds the depth of every state.
+            (and (not removed?) (> (+ (depth-above (:tree st) path) (depth (:node out))) max-nesting))
+            {:redex r :error (nesting-message) :cap :size}
+
+            :else
             {:redex r
              :caption (:caption out)
              :lookup (:lookup out)

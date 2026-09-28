@@ -474,7 +474,7 @@
         (str "Caps: " (reader/format-count reader/max-chars) " characters of input, "
              reader/max-nesting " levels of brackets, "
              (reader/format-count s/max-steps) " steps, " s/max-depth " nested calls, "
-             (reader/format-count s/max-nodes) " boxes on the stage, "
+             (reader/format-count s/max-nodes) " boxes on the stage, nested at most " s/max-nesting " deep, "
              (reader/format-count b/max-value) " items in one value.")))
 
 (defn- step-button! [id f]
